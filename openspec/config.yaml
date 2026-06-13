@@ -1,0 +1,61 @@
+# openspec/config.yaml
+schema: spec-driven
+
+context: |
+  Monorepo: backend (Python/FastAPI) + dashboard (Next.js).
+  Backend: FastAPI 0.115, SQLAlchemy 2.0, pg8000, Pydantic 2, google-api-python-client. PostgreSQL.
+  Frontend: Next.js 16, React 19, TypeScript 5.9, Tailwind 4, SWR, Leaflet, Recharts.
+  Arquitectura objetivo: Hexagonal pragmática (domain/infrastructure/application).
+  Testing objetivo: pytest + Postgres real vía Docker (NO SQLite). Frontend testing diferido.
+  Estilo: eslint+tsc (front). Backend sin lint/type-check aún (a añadir: ruff + mypy).
+  Plan maestro: docs/superpowers/specs/2026-06-14-reestructuracion-seguimiento-clientes-design.md
+
+strict_tdd: false  # No hay test runner aún. Change 1 establece pytest → re-resolver a true tras Change 1.
+
+# PRINCIPIOS INNEGOCIABLES (aplican a TODOS los changes):
+#  - No easy-path, no test-gaming (no hardcodear para pasar tests), no mocks que esconden lógica propia.
+#  - Tests contra Postgres real (Docker), no SQLite. Mocks solo para fronteras externas (Google Calendar).
+#  - No silenciar errores. Buscar CAUSA RAÍZ. Tests de caracterización ANTES de refactorizar.
+
+testing:
+  strict_tdd: false
+  detected: "2026-06-14"
+  test_runner:
+    command: null
+    framework: "NONE — a establecer en Change 1 (pytest)"
+  layers:
+    unit: { available: false, tool: null }
+    integration: { available: false, tool: null }
+    e2e: { available: false, tool: null }
+  coverage:
+    available: false
+    command: null
+  quality:
+    linter: { available: true, command: "cd dashboard && npm run lint" }   # solo frontend
+    type_checker: { available: true, command: "cd dashboard && npx tsc --noEmit" }  # solo frontend
+    formatter: { available: false, command: null }
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - Identify affected modules/packages
+  specs:
+    - Use Given/When/Then format for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale
+  tasks:
+    - Group tasks by phase (infrastructure, implementation, testing)
+    - Use hierarchical numbering (1.1, 1.2, etc.)
+    - Keep tasks small enough to complete in one session
+  apply:
+    - Follow existing code patterns and conventions
+    - NO easy-path, NO test-gaming, NO silenciar errores — buscar causa raíz
+    - Tests contra Postgres real (Docker), no SQLite
+  verify:
+    - Run tests if test infrastructure exists
+    - Compare implementation against every spec scenario
+    - Reject hardcoded/gamed test results
+  archive:
+    - Warn before merging destructive deltas (large removals)

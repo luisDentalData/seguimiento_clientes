@@ -68,9 +68,8 @@ dashboard/out/
 *.dump
 
 # === ARCHIVOS TEMPORALES DE DESARROLLO ===
-# Archivos de prueba
-*.test.py
-test_*.py
+# NOTA: NO ignoramos test_*.py — la suite real vive en tests/ y DEBE versionarse.
+# (patrón heredado eliminado: antes ignoraba todos los test_*.py)
 
 # Outputs temporales
 output*.txt
