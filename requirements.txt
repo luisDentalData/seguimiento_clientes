@@ -15,9 +15,11 @@ python-multipart==0.0.18
 # ----------------------------------------------------------------------------
 sqlalchemy==2.0.36
 pg8000==1.31.2
+alembic==1.17.2
 
 # pg8000: Driver PostgreSQL puro Python (no requiere compilación)
 # Alternativa a psycopg2 que es más fácil de instalar
+# alembic: migraciones de esquema versionadas
 
 # ----------------------------------------------------------------------------
 # Google Calendar API

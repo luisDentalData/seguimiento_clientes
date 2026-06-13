@@ -1,6 +1,14 @@
 """
-Script para cargar datos desde clientes_maestro.json a la base de datos
-Elimina todos los clientes existentes y carga los nuevos datos maestros
+Script DESTRUCTIVO para cargar datos desde clientes_maestro.json.
+
+⚠️ ESTE SCRIPT DROPEA TODAS LAS TABLAS (incluyendo appointments).
+Solo para setup inicial o disaster recovery.
+
+Para agregar/actualizar clientes en el día a día usá:
+    python src/scripts/sync_clientes_maestro.py   (no destructivo, UPSERT)
+
+Por seguridad, este script SE NIEGA a correr salvo que se setee:
+    ALLOW_DESTRUCTIVE_LOAD=yes
 """
 
 import sys
@@ -13,8 +21,31 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 from src.database import SessionLocal, engine, Base
 from src.models import Client, ClientEmail
 
+
+def _assert_destructive_allowed():
+    """Bloquea la operación destructiva salvo flag explícito.
+
+    Lanza RuntimeError si ALLOW_DESTRUCTIVE_LOAD no está habilitado.
+    """
+    allowed = os.getenv("ALLOW_DESTRUCTIVE_LOAD", "").strip().lower() in (
+        "1",
+        "yes",
+        "true",
+    )
+    if not allowed:
+        raise RuntimeError(
+            "Operación destructiva bloqueada: este script DROPEA TODAS las tablas "
+            "(incluye appointments). Para el día a día usá "
+            "src/scripts/sync_clientes_maestro.py (no destructivo). "
+            "Para forzar disaster recovery: ALLOW_DESTRUCTIVE_LOAD=yes"
+        )
+
+
 def load_clientes_maestro():
-    """Carga los clientes desde clientes_maestro.json"""
+    """Carga los clientes desde clientes_maestro.json (DESTRUCTIVO)."""
+
+    # Guard: no dropear nada sin autorización explícita.
+    _assert_destructive_allowed()
 
     maestro_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
