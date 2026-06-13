@@ -1,0 +1,218 @@
+# ============================================================================
+# .dockerignore para BACKEND
+# ============================================================================
+# Este archivo funciona como .gitignore pero para Docker
+# Le dice a Docker qué archivos NO copiar al contenedor durante el build
+#
+# ¿Por qué es importante?
+# 1. VELOCIDAD: Menos archivos = build más rápido
+# 2. TAMAÑO: Imagen más pequeña
+# 3. SEGURIDAD: No copiar credenciales accidentalmente
+# 4. CACHE: Ignorar archivos que cambian seguido (logs) mejora cache
+
+# ----------------------------------------------------------------------------
+# Control de Versiones
+# ----------------------------------------------------------------------------
+.git
+.gitignore
+.gitattributes
+
+# ¿Por qué ignorar .git?
+# El historial de git puede ser ENORME (cientos de MB)
+# No lo necesitamos en el contenedor (solo el código actual)
+
+# ----------------------------------------------------------------------------
+# Python
+# ----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# __pycache__: Cache de Python (archivos .pyc compilados)
+# ¿Por qué ignorar? Se regeneran automáticamente, ocupan espacio
+# Python los crea en runtime, no necesitamos copiarlos
+
+# Entornos virtuales
+venv/
+env/
+ENV/
+.venv
+
+# venv/: Entorno virtual de Python (puede pesar 100MB+)
+# ¿Por qué ignorar? Instalamos deps con pip dentro del contenedor
+# No necesitamos el venv local de Windows
+
+# ----------------------------------------------------------------------------
+# Node.js / Frontend
+# ----------------------------------------------------------------------------
+node_modules/
+dashboard/node_modules/
+dashboard/.next/
+dashboard/out/
+dashboard/.cache/
+
+# node_modules/: Dependencias de npm (puede pesar 500MB+)
+# ¿Por qué ignorar? Se instalan con npm ci dentro del Dockerfile
+# Además, node_modules de Windows puede ser incompatible con Linux
+
+# dashboard/.next/: Build anterior de Next.js
+# ¿Por qué ignorar? Se genera nuevo build dentro del Docker
+# El build local (Windows) puede ser diferente al de Linux
+
+# ----------------------------------------------------------------------------
+# Logs y Temporales
+# ----------------------------------------------------------------------------
+logs/
+*.log
+*.log.*
+*.tmp
+*.temp
+
+# logs/: Logs de desarrollo
+# ¿Por qué ignorar? Se generan nuevos en el contenedor
+# Los logs viejos no sirven y ocupan espacio
+
+# ----------------------------------------------------------------------------
+# Base de Datos
+# ----------------------------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+
+# ¿Por qué ignorar? PostgreSQL estará en otro contenedor
+# No queremos bases de datos SQLite de desarrollo
+
+# ----------------------------------------------------------------------------
+# Variables de Entorno
+# ----------------------------------------------------------------------------
+.env
+.env.local
+.env.development
+.env.production
+
+# .env: Credenciales sensibles (DATABASE_URL, API keys)
+# ¿Por qué ignorar? Las pasaremos via docker-compose o Azure
+# NUNCA incluir credenciales en la imagen Docker
+
+# ----------------------------------------------------------------------------
+# Configuración de IDEs
+# ----------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# .vscode/: Configuración de Visual Studio Code
+# ¿Por qué ignorar? No la necesita el contenedor
+
+# ----------------------------------------------------------------------------
+# Docker
+# ----------------------------------------------------------------------------
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# ¿Por qué ignorar los propios archivos Docker?
+# El Dockerfile ya está "ejecutado" (no lo necesitamos dentro)
+# Reduce confusión y tamaño
+
+# ----------------------------------------------------------------------------
+# Documentación y Pruebas
+# ----------------------------------------------------------------------------
+*.md
+README*
+docs/
+tests/
+test_*.py
+*_test.py
+
+# *.md: Archivos Markdown (README, docs)
+# ¿Por qué ignorar? No los necesita la app en runtime
+# Útiles para developers, no para producción
+
+# EXCEPCIÓN: Si quieres incluir CLAUDE.md:
+!CLAUDE.md
+
+# El ! niega la regla anterior (incluye este archivo específico)
+
+# ----------------------------------------------------------------------------
+# Sistema Operativo
+# ----------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Archivos generados por Windows/Mac
+# No sirven en Linux, solo ocupan espacio
+
+# ----------------------------------------------------------------------------
+# Archivos de Build
+# ----------------------------------------------------------------------------
+dist/
+build/
+*.egg-info/
+
+# dist/: Builds anteriores de Python
+# ¿Por qué ignorar? No los necesitamos
+
+# ----------------------------------------------------------------------------
+# Credenciales de Google Calendar (IMPORTANTE)
+# ----------------------------------------------------------------------------
+credentials.json
+token.pickle
+client_secret_oauth.json
+
+# credentials.json: Credenciales OAuth de Google
+# token.pickle: Token de autenticación
+# ¿Por qué ignorar? Los montaremos como VOLUMES en docker-compose
+# No queremos hardcodearlos en la imagen (inseguro)
+
+# ----------------------------------------------------------------------------
+# Archivos Temporales de Desarrollo
+# ----------------------------------------------------------------------------
+*.xlsx
+*.csv
+*.json.bak
+io.json
+id_mapping.json
+
+# Archivos de Excel, CSVs de prueba, backups
+# No los necesitamos en producción
+
+# ----------------------------------------------------------------------------
+# Scripts de Desarrollo
+# ----------------------------------------------------------------------------
+start_dev.bat
+*.bat
+*.sh
+
+# Scripts de Windows (.bat) no funcionan en Linux
+# Los reemplazamos con docker-compose
+
+# ============================================================================
+# RESUMEN DEL FLUJO:
+# ============================================================================
+# Cuando ejecutas: docker build -t backend .
+#
+# 1. Docker lee .dockerignore
+# 2. Crea "contexto de build" excluyendo archivos ignorados
+# 3. Envía contexto al Docker daemon
+# 4. Ejecuta instrucciones del Dockerfile
+#
+# SIN .dockerignore:
+# - Contexto: 500MB (incluye node_modules, .git, venv, etc.)
+# - Build tarda: 2-3 minutos
+#
+# CON .dockerignore:
+# - Contexto: 50MB (solo código esencial)
+# - Build tarda: 30 segundos
+#
+# BENEFICIOS:
+# ✅ 10x más rápido
+# ✅ Imagen 70% más pequeña
+# ✅ Más seguro (no credenciales)
+# ✅ Cache de Docker funciona mejor
+# ============================================================================

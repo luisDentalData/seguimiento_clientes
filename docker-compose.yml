@@ -1,0 +1,404 @@
+# ============================================================================
+# DOCKER COMPOSE - Orquestador de Contenedores
+# ============================================================================
+# Docker Compose permite definir y ejecutar aplicaciones multi-contenedor
+#
+# ¿Qué hace este archivo?
+# Define 3 servicios (contenedores) que trabajan juntos:
+# 1. db (PostgreSQL) - Base de datos
+# 2. backend (FastAPI) - API REST
+# 3. frontend (Next.js) - Interfaz web
+#
+# ¿Por qué usar docker-compose?
+# - Un solo comando levanta TODO: docker-compose up
+# - Maneja redes automáticamente (los contenedores se ven entre sí)
+# - Maneja volúmenes (persistencia de datos)
+# - Define dependencias (backend espera a que db esté lista)
+# - Reproducible (funciona igual en cualquier máquina)
+
+# ============================================================================
+# SERVICIOS (Contenedores)
+# ============================================================================
+services:
+
+  # --------------------------------------------------------------------------
+  # SERVICIO 1: Base de Datos PostgreSQL
+  # --------------------------------------------------------------------------
+  db:
+    # Nombre del contenedor (opcional, para identificación)
+    container_name: dentaldata-db
+
+    # Imagen base desde Docker Hub
+    image: postgres:14-alpine
+
+    # ¿Por qué postgres:14-alpine?
+    # - postgres:14: Versión compatible con tu app
+    # - alpine: Variante ligera (40MB vs 150MB de postgres:14)
+    # - Imagen oficial de PostgreSQL (mantenida y segura)
+
+    # ¿Por qué no construir con Dockerfile?
+    # PostgreSQL ya tiene imagen oficial optimizada
+    # No necesitamos customizarla
+
+    # Reinicio automático si el contenedor falla
+    restart: unless-stopped
+
+    # unless-stopped: Reinicia siempre excepto si lo detuviste manualmente
+    # Alternativas:
+    # - no: Nunca reiniciar
+    # - always: Siempre reiniciar (incluso si lo paras)
+    # - on-failure: Solo si falla (exit code != 0)
+
+    # Variables de entorno
+    environment:
+      # Nombre de la base de datos a crear
+      POSTGRES_DB: dentaldata
+
+      # Usuario root de PostgreSQL
+      POSTGRES_USER: postgres
+
+      # Contraseña del usuario (CAMBIAR EN PRODUCCIÓN)
+      POSTGRES_PASSWORD: dentaldata
+
+      # ⚠️ ADVERTENCIA: En producción usa secrets o Azure Key Vault
+      # NO hardcodees contraseñas en archivos versionados
+
+      # Configuración de encoding (importante para caracteres españoles)
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=es_ES.UTF-8"
+
+    # Volúmenes (persistencia de datos)
+    volumes:
+      # Volume nombrado para datos de PostgreSQL
+      - postgres_data:/var/lib/postgresql/data
+      # ¿Qué es un volume nombrado?
+      # - postgres_data: Nombre del volume (definido abajo)
+      # - /var/lib/postgresql/data: Ruta donde Postgres guarda datos
+      #
+      # ¿Por qué volúmenes?
+      # Sin volumen: Si borras el contenedor, pierdes TODOS los datos
+      # Con volumen: Los datos persisten aunque borres el contenedor
+      #
+      # Los datos se guardan en: C:\ProgramData\Docker\volumes\postgres_data
+
+      # Puertos expuestos (mapeo host:contenedor)
+    ports:
+      - "5434:5432"
+      # 5434:5432 significa:
+      # - 5434 (izquierda): Puerto en tu máquina (localhost:5434)
+      # - 5432 (derecha): Puerto dentro del contenedor
+      # NOTA: Usamos 5434 para evitar conflicto con PostgreSQL local de Windows (5432)
+      #
+      # Puedes conectarte desde tu máquina:
+      # psql -h localhost -p 5432 -U postgres -d dentaldata
+      #
+      # En producción (Azure), NO expondrías este puerto
+      # Solo los otros contenedores accederían a la BD
+
+      # Health check (verifica que PostgreSQL está listo)
+    healthcheck:
+      # Comando para verificar salud
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+
+      # pg_isready: Comando de PostgreSQL que verifica si acepta conexiones
+      # -U postgres: Conectar con usuario postgres
+      #
+      # Devuelve 0 si está listo, 1 si no
+
+      # Intervalo entre checks
+      interval: 10s
+
+      # Cada 10 segundos, ejecuta pg_isready
+
+      # Timeout máximo para el check
+      timeout: 5s
+
+      # Si pg_isready no responde en 5s, se considera fallido
+
+      # Número de reintentos antes de marcar como unhealthy
+      retries: 5
+      # Si falla 5 veces consecutivas → unhealthy
+      # Docker Compose puede reiniciar el contenedor
+
+      # Red privada (comunicación entre contenedores)
+    networks:
+      - dentaldata-network
+    # ¿Qué es una network?
+    # Es como una LAN virtual donde los contenedores se ven entre sí
+    # db puede hablar con backend usando: postgresql://db:5432
+    # (usa el nombre del servicio como hostname)
+
+    # --------------------------------------------------------------------------
+    # SERVICIO 2: Backend (FastAPI)
+    # --------------------------------------------------------------------------
+  backend:
+    container_name: dentaldata-backend
+
+    # Construir desde Dockerfile (no usar imagen pre-construida)
+    build:
+      # Contexto de build (directorio donde está el Dockerfile)
+      context: .
+
+      # . significa raíz del proyecto
+      # Docker enviará este directorio al daemon (excluyendo .dockerignore)
+
+      # Ruta al Dockerfile
+      dockerfile: Dockerfile
+      # Podríamos tener múltiples Dockerfiles:
+      # - Dockerfile (producción)
+      # - Dockerfile.dev (desarrollo)
+      # - Dockerfile.test (testing)
+
+    restart: unless-stopped
+
+    # Variables de entorno para el backend
+    environment:
+      # URL de conexión a PostgreSQL
+      DATABASE_URL: postgresql+pg8000://postgres:dentaldata@db:5432/dentaldata
+
+      # Desglose de la URL:
+      # - postgresql+pg8000: Driver (pg8000 en vez de psycopg2)
+      # - postgres:dentaldata: usuario:contraseña
+      # - @db: Hostname (nombre del servicio de PostgreSQL)
+      #        Docker Compose resuelve "db" a la IP del contenedor
+      # - :5432: Puerto de PostgreSQL
+      # - /dentaldata: Nombre de la base de datos
+
+      # Emails de analistas (para ETL)
+      ANALYST_EMAILS: u.barroso@dentaldata.es,m.val@dentaldata.es,c.bosom@dentaldata.es
+
+      # Email para impersonar en Google Calendar
+      IMPERSONATE_EMAIL: luis@dentaldata.es
+
+      # Ruta a credenciales de Google (dentro del contenedor)
+      GOOGLE_CREDENTIALS_PATH: /app/credentials.json
+
+    # Volúmenes (montajes de archivos/directorios)
+    volumes:
+      # Volume para logs (persistencia)
+      - ./logs:/app/logs
+
+      # ./logs (host): Carpeta en tu máquina
+      # /app/logs (contenedor): Carpeta dentro del contenedor
+      # Bidireccional: Cambios en ambos lados se sincronizan
+      #
+      # ¿Por qué? Para ver logs desde tu máquina sin entrar al contenedor
+
+      # Credenciales de Google (solo lectura)
+      - ./credentials.json:/app/credentials.json:ro
+      - ./token.pickle:/app/token.pickle
+      # :ro = read-only
+      # El contenedor puede LEER pero NO ESCRIBIR
+      #
+      # ¿Por qué read-only?
+      # Seguridad: El contenedor no puede modificar tus credenciales
+
+      # ⚠️ IMPORTANTE: credentials.json debe existir en el host
+      # Si no existe, docker-compose fallará al iniciar
+
+      # Puertos expuestos
+    ports:
+      - "8000:8000"
+      # Accesible desde: http://localhost:8000
+      # Docs en: http://localhost:8000/docs
+
+      # Dependencias (orden de inicio)
+    depends_on:
+      db:
+        # Condición: esperar hasta que db esté "healthy"
+        condition: service_healthy
+
+    # ¿Qué hace depends_on?
+    # 1. Docker Compose inicia db primero
+    # 2. Espera a que health check de db sea exitoso
+    # 3. Luego inicia backend
+    #
+    # Sin esto: backend intentaría conectarse a db antes de que esté lista
+    # Resultado: Error "connection refused"
+
+    # Health check del backend
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # Periodo de gracia al iniciar (no falla inmediatamente)
+      start_period: 40s
+      # start_period=40s: Da 40 segundos para que uvicorn inicie
+      # Durante este tiempo, fallos del health check no cuentan
+
+    networks:
+      - dentaldata-network
+
+  # --------------------------------------------------------------------------
+  # SERVICIO 3: Frontend (Next.js)
+  # --------------------------------------------------------------------------
+  frontend:
+    container_name: dentaldata-frontend
+
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+      # Contexto: ./dashboard (donde está el código de Next.js)
+      # Dockerfile: dashboard/Dockerfile (el que creamos antes)
+
+    restart: unless-stopped
+
+    environment:
+      # URL del backend (para llamadas API)
+      # CAMBIO: NO definir NEXT_PUBLIC_API_URL para que use el fallback de localhost:8000
+      # El navegador del usuario necesita http://localhost:8000 (no http://backend:8000)
+      # http://backend:8000 solo funciona DENTRO de la red Docker
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+
+      # NEXT_PUBLIC_: Variables accesibles en el cliente (browser)
+      # Sin NEXT_PUBLIC_: Solo accesibles en el servidor
+      #
+      # ¿Por qué http://localhost:8000 y no http://backend:8000?
+      # - El navegador (cliente) corre en la máquina del usuario, no en Docker
+      # - "backend" es un hostname DNS interno de Docker, no resuelve en el navegador
+      # - localhost:8000 apunta al puerto mapeado 8000:8000 en el host
+      #
+      # Nota: Si usamos SSR (Server-Side Rendering), Next.js podría necesitar backend:8000
+      # pero como usamos 'use client' en la mayoría de componentes, necesitamos localhost
+
+      # Puerto de Next.js
+      PORT: 3000
+
+      # Modo de producción
+      NODE_ENV: production
+
+    ports:
+      - "3000:3000"
+      # Accesible desde: http://localhost:3000
+
+    depends_on:
+      - backend
+      # Espera a que backend esté arriba antes de iniciar frontend
+      # No usa condition: service_healthy porque backend puede tardar
+
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+      # start_period=60s: Next.js puede tardar en compilar en el primer inicio
+
+    networks:
+      - dentaldata-network
+
+# ============================================================================
+# VOLÚMENES (Almacenamiento Persistente)
+# ============================================================================
+volumes:
+  # Volume para datos de PostgreSQL
+  postgres_data:
+    # Sin configuración adicional = volume local manejado por Docker
+
+    # ¿Dónde se guarda?
+    # Windows: C:\ProgramData\Docker\volumes\postgres_data\_data
+    # Linux: /var/lib/docker/volumes/postgres_data/_data
+    #
+    # Comandos útiles:
+    # docker volume ls - Listar volúmenes
+    # docker volume inspect postgres_data - Ver detalles
+    # docker volume rm postgres_data - Borrar (⚠️ pierdes datos)
+
+    # ============================================================================
+    # REDES (Comunicación entre Contenedores)
+    # ============================================================================
+networks:
+  dentaldata-network:
+    # Red bridge (tipo por defecto)
+    driver: bridge
+    # ¿Qué es bridge?
+    # Es como un switch virtual que conecta los contenedores
+    #
+    # Funcionalidad:
+    # - db puede hablar con backend usando: db:5432
+    # - backend puede hablar con frontend usando: backend:8000
+    # - Aislado del exterior (a menos que expongas puertos)
+    #
+    # DNS automático:
+    # Docker Compose crea DNS para nombres de servicio
+    # "db" → IP del contenedor de PostgreSQL
+    # "backend" → IP del contenedor de FastAPI
+
+    # ============================================================================
+    # COMANDOS ÚTILES
+    # ============================================================================
+    #
+    # INICIAR TODO:
+    #   docker-compose up -d
+    #   -d: Detached mode (corre en background)
+    #
+    # VER LOGS:
+    #   docker-compose logs -f backend
+    #   -f: Follow (en tiempo real)
+    #
+    # VER ESTADO:
+    #   docker-compose ps
+    #
+    # REINICIAR UN SERVICIO:
+    #   docker-compose restart backend
+    #
+    # DETENER TODO:
+    #   docker-compose down
+    #
+    # DETENER Y BORRAR VOLÚMENES (⚠️ PIERDE DATOS):
+    #   docker-compose down -v
+    #
+    # REBUILD DE IMÁGENES:
+    #   docker-compose build --no-cache
+    #   --no-cache: No usar cache de Docker (build desde cero)
+    #
+    # EJECUTAR COMANDO EN CONTENEDOR:
+    #   docker-compose exec backend python src/scripts/check_db.py
+    #   exec: Ejecuta comando en contenedor corriendo
+    #
+    # ABRIR SHELL EN CONTENEDOR:
+    #   docker-compose exec backend /bin/bash
+    #   docker-compose exec db psql -U postgres -d dentaldata
+    #
+    # ============================================================================
+    # FLUJO DE INICIO
+    # ============================================================================
+    # Cuando ejecutas: docker-compose up
+    #
+    # 1. Docker Compose lee este archivo (docker-compose.yml)
+    # 2. Crea la red "dentaldata-network"
+    # 3. Crea el volumen "postgres_data" (si no existe)
+    # 4. Construye imágenes:
+    #    - Descarga postgres:14-alpine (si no existe)
+    #    - Construye backend desde Dockerfile
+    #    - Construye frontend desde dashboard/Dockerfile
+    # 5. Inicia contenedores en orden:
+    #    a) db (PostgreSQL)
+    #    b) Espera a que db esté healthy (pg_isready OK)
+    #    c) backend (FastAPI)
+    #    d) frontend (Next.js)
+    # 6. Configura DNS interno (nombres de servicio → IPs)
+    # 7. Expone puertos (5432, 8000, 3000)
+    # 8. ¡TODO CORRIENDO!
+    #
+    # Resultado: 3 contenedores trabajando juntos como una sola aplicación
+    #
+    # ============================================================================
+    # VENTAJAS vs SIN DOCKER
+    # ============================================================================
+    # SIN DOCKER:
+    # - Instalar Python 3.12 manualmente
+    # - Instalar Node.js 18 manualmente
+    # - Instalar PostgreSQL manualmente
+    # - Configurar PG (crear BD, usuario)
+    # - pip install -r requirements.txt
+    # - cd dashboard && npm install
+    # - Ejecutar 3 terminales separadas
+    # - Configurar .env con rutas correctas
+    # - Rezar que funcione en otra máquina
+    #
+    # CON DOCKER:
+    # - docker-compose up
+    # - ¡Funciona!
+    #
+    # ============================================================================
