@@ -11,6 +11,7 @@ from src.database import get_db
 from src.models import Appointment as AppointmentModel, Client as ClientModel
 from src.schemas import Appointment, Client, ClientAdminCreate, ClientAdminUpdate
 from src.services.portfolio import get_client_portfolio
+from src.services.category_stats import get_category_stats
 from src.services import client_admin
 
 app = FastAPI(title="Dental Data Tracking API")
@@ -220,6 +221,22 @@ def get_clients_portfolio(
         }
         for e in entries
     ]
+
+
+@app.get("/stats/categories")
+def get_category_stats_endpoint(
+    analyst_email: Optional[str] = None,
+    month: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """Carga de reuniones por categoría (total, por analista, por mes).
+
+    `total` y `by_analyst` respetan analista+mes; `by_month` ignora el mes
+    (para mostrar la evolución temporal).
+    """
+    analyst = analyst_email if analyst_email and analyst_email != "all" else None
+    period = month if month and month != "all" else None
+    return get_category_stats(db, analyst_email=analyst, month=period)
 
 
 @app.get("/clients/with-meetings")

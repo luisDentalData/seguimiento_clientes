@@ -71,6 +71,13 @@ export interface ClientWithoutMeetings {
 // Respuesta de GET /clients/portfolio — estado calculado en el BACKEND.
 export type ClientStatus = 'OK' | 'ATTENTION' | 'CRITICAL';
 
+// Respuesta de GET /stats/categories — carga de reuniones por categoría.
+export interface CategoryStats {
+    total: { category: string; count: number }[];
+    by_analyst: { analyst: string; categories: Record<string, number> }[];
+    by_month: { month: string; categories: Record<string, number> }[];
+}
+
 export interface PortfolioClient {
     id: string;
     name: string;

@@ -6,7 +6,7 @@ import { TrendingUp, Calendar, Users, Target, BarChart3, PieChart } from 'lucide
 import Header from '@/components/Header';
 import FilterBar from '@/components/FilterBar';
 import { api } from '@/lib/api';
-import type { Appointment, SummaryStats } from '@/lib/types';
+import type { Appointment, SummaryStats, CategoryStats } from '@/lib/types';
 import { format, startOfMonth, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -25,12 +25,26 @@ import {
 
 const fetcher = (url: string) => api.get(url).then(res => res.data);
 
+// Categorías de la taxonomía rica + color/etiqueta para los gráficos.
+const CATEGORY_META: { key: string; label: string; color: string }[] = [
+  { key: 'CLIENTE', label: 'Cliente', color: '#10b981' },
+  { key: 'INTERNO', label: 'Interno', color: '#3b82f6' },
+  { key: 'VACACIONES', label: 'Vacaciones', color: '#f59e0b' },
+  { key: 'EVENTO', label: 'Evento', color: '#a855f7' },
+  { key: 'PERSONAL', label: 'Personal', color: '#ec4899' },
+  { key: 'SIN_CLASIFICAR', label: 'Sin clasificar', color: '#6b7280' },
+];
+
 export default function AnaliticasPage() {
   const [selectedAnalyst, setSelectedAnalyst] = useState('all');
   const [selectedMonth, setSelectedMonth] = useState('all');
 
   const { data: stats } = useSWR<SummaryStats>('/stats/summary', fetcher, { refreshInterval: 30000 });
   const { data: allAppointments } = useSWR<Appointment[]>('/appointments?limit=10000', fetcher, { refreshInterval: 30000 });
+
+  // Carga por categoría (backend agrega; total/analista respetan filtros, mes ignora el mes)
+  const categoryStatsKey = `/stats/categories?analyst_email=${selectedAnalyst}&month=${selectedMonth}`;
+  const { data: categoryStats } = useSWR<CategoryStats>(categoryStatsKey, fetcher, { refreshInterval: 30000 });
 
   // Filter appointments
   const filteredAppointments = useMemo(() => {
@@ -205,6 +219,37 @@ export default function AnaliticasPage() {
     };
     return names[email] || email;
   };
+
+  // Transforms para los gráficos de carga por categoría
+  const categoryTotal = useMemo(() => {
+    if (!categoryStats) return [];
+    return categoryStats.total
+      .map(t => {
+        const meta = CATEGORY_META.find(m => m.key === t.category);
+        return { name: meta?.label ?? t.category, value: t.count, color: meta?.color ?? '#6b7280' };
+      })
+      .sort((a, b) => b.value - a.value);
+  }, [categoryStats]);
+
+  const categoryByAnalyst = useMemo(() => {
+    if (!categoryStats) return [];
+    return categoryStats.by_analyst.map(row => {
+      const obj: Record<string, number | string> = { analyst: getAnalystName(row.analyst) };
+      CATEGORY_META.forEach(m => { obj[m.key] = row.categories[m.key] ?? 0; });
+      return obj;
+    });
+  }, [categoryStats]);
+
+  const categoryByMonth = useMemo(() => {
+    if (!categoryStats) return [];
+    return categoryStats.by_month.map(row => {
+      const obj: Record<string, number | string> = { month: row.month };
+      CATEGORY_META.forEach(m => { obj[m.key] = row.categories[m.key] ?? 0; });
+      return obj;
+    });
+  }, [categoryStats]);
+
+  const allUnclassified = categoryTotal.length === 1 && categoryTotal[0].name === 'Sin clasificar';
 
   return (
     <div>
@@ -414,6 +459,73 @@ export default function AnaliticasPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Carga de Reuniones por Categoría */}
+      <div className="mt-8">
+        <h2 className="text-xl font-bold text-white mb-1">Carga de Reuniones por Categoría</h2>
+        <p className="text-sm text-slate-400 mb-4">
+          Reparto del trabajo del equipo por tipo de reunión (cliente, interno, vacaciones, evento...).
+        </p>
+
+        {allUnclassified && (
+          <div className="mb-4 bg-yellow-500/10 border border-yellow-500/40 rounded-xl p-4 text-sm text-yellow-300">
+            Todas las reuniones figuran como <strong>Sin clasificar</strong>. La categoría se completa
+            al volver a ejecutar el ETL (botón Sincronizar). Hasta entonces este es el estado esperado.
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          {/* Distribución total */}
+          <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">Distribución total</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <RePieChart>
+                <Pie data={categoryTotal} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>
+                  {categoryTotal.map((entry, i) => (
+                    <Cell key={i} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }} />
+                <Legend />
+              </RePieChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Por analista (apilado) */}
+          <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">Por analista</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={categoryByAnalyst}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis dataKey="analyst" stroke="#94a3b8" fontSize={12} />
+                <YAxis stroke="#94a3b8" fontSize={12} />
+                <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }} />
+                <Legend />
+                {CATEGORY_META.map(m => (
+                  <Bar key={m.key} dataKey={m.key} stackId="cat" fill={m.color} name={m.label} />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Evolución por mes (apilado) */}
+        <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Evolución por mes</h3>
+          <ResponsiveContainer width="100%" height={320}>
+            <BarChart data={categoryByMonth}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+              <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} />
+              <YAxis stroke="#94a3b8" fontSize={12} />
+              <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }} />
+              <Legend />
+              {CATEGORY_META.map(m => (
+                <Bar key={m.key} dataKey={m.key} stackId="cat" fill={m.color} name={m.label} />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
     </div>
