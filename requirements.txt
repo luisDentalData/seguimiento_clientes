@@ -51,12 +51,8 @@ python-dateutil==2.9.0
 requests==2.32.3
 
 # ----------------------------------------------------------------------------
-# Fuzzy Matching (for client name matching)
-# ----------------------------------------------------------------------------
-fuzzywuzzy==0.18.0
-python-Levenshtein==0.27.1
-
-# ----------------------------------------------------------------------------
 # JSON & Data Processing
 # ----------------------------------------------------------------------------
 # (Incluido en stdlib, no necesita instalación)
+# Nota: fuzzy matching (fuzzywuzzy/Levenshtein) se removió — el matching es
+# exclusivamente por límite de palabra (ver src/domain/meetings/classifier.py).

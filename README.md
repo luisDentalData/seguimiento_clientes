@@ -120,12 +120,14 @@ npm install
 
 ### Desarrollo
 
-**Opción 1: Inicio automático (Windows)**
+**Opción 1: Docker (recomendado)**
 ```bash
-start_dev.bat
+docker-compose up -d            # levanta db + backend + frontend
+docker-compose up -d --build    # idem, reconstruyendo imágenes
+docker-compose down             # detener
 ```
 
-**Opción 2: Inicio manual**
+**Opción 2: Manual (sin Docker)**
 
 Terminal 1 - Backend:
 ```bash
@@ -152,15 +154,27 @@ Ver [CLAUDE.md](CLAUDE.md) para instrucciones detalladas de deployment en Azure.
 ### Backend
 
 ```bash
-# Verificar contenido de la base de datos
-python src/scripts/check_db.py
+# Agregar/actualizar clientes desde el maestro (NO destructivo, UPSERT)
+python src/scripts/sync_clientes_maestro.py
 
-# Exportar base de datos a JSON
-python src/scripts/export_db_to_json.py
+# Migraciones de esquema (Alembic)
+python -m alembic upgrade head
+# En una base existente sin Alembic: primero marcar el baseline
+python -m alembic stamp 03d2c807e4fc && python -m alembic upgrade head
 
-# Ejecutar ETL manualmente
+# Ejecutar ETL manualmente (matchea eventos de calendario a clientes)
 python src/etl.py
+
+# Tests (requiere Postgres en localhost:5434)
+python -m pytest
+
+# Utilidades de diagnóstico
+python src/scripts/check_db.py            # ver contenido de la DB
+python src/scripts/export_db_to_json.py   # exportar la DB a JSON
 ```
+
+> Para agregar un cliente nuevo: usá el botón **"Nuevo cliente"** en el dashboard
+> (o el script de sync). Luego dale a **Sincronizar** para matchear sus reuniones.
 
 ### Frontend
 
