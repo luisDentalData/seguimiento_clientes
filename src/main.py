@@ -10,6 +10,7 @@ import os
 from src.database import get_db
 from src.models import Appointment as AppointmentModel, Client as ClientModel
 from src.schemas import Appointment, Client
+from src.services.portfolio import get_client_portfolio
 
 app = FastAPI(title="Dental Data Tracking API")
 
@@ -44,9 +45,9 @@ allowed_origins = [
 # En producción (Cloud Run), agregar la URL del frontend
 if FRONTEND_URL:
     allowed_origins.append(FRONTEND_URL)
-    print(f"✅ CORS enabled for frontend: {FRONTEND_URL}")
+    print(f"[OK] CORS enabled for frontend: {FRONTEND_URL}")
 else:
-    print("⚠️  FRONTEND_URL not set - only local origins allowed")
+    print("[WARN] FRONTEND_URL not set - only local origins allowed")
 
 app.add_middleware(
     CORSMiddleware,
@@ -142,6 +143,38 @@ def get_summary_stats(db: Session = Depends(get_db)):
             } for a, t, c in analyst_stats
         ]
     }
+
+@app.get("/clients/portfolio")
+def get_clients_portfolio(
+    analyst_email: Optional[str] = None,
+    active_only: bool = True,
+    db: Session = Depends(get_db),
+):
+    """Portfolio de clientes con estado de seguimiento calculado en el BACKEND.
+
+    Estado (OK/ATTENTION/CRITICAL) calculado desde HOY en el servidor — una sola
+    verdad para todos los analistas (antes lo calculaba el navegador).
+    Ordenado por prioridad: CRITICAL → ATTENTION → OK.
+    """
+    entries = get_client_portfolio(
+        db, analyst_email=analyst_email, active_only=active_only
+    )
+    return [
+        {
+            "id": e.id,
+            "name": e.name,
+            "nombre_contacto": e.nombre_contacto,
+            "programa": e.programa,
+            "provincia": e.provincia,
+            "last_session": e.last_session.isoformat() if e.last_session else None,
+            "days_since": e.days_since,
+            "valid_sessions": e.valid_sessions,
+            "last_analyst": e.last_analyst,
+            "status": e.status.value,
+        }
+        for e in entries
+    ]
+
 
 @app.get("/clients/with-meetings")
 def get_clients_with_meetings(active_only: bool = True, db: Session = Depends(get_db)):
