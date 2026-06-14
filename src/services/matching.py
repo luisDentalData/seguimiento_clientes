@@ -28,6 +28,7 @@ class Matcher:
         self._clients_cache = None
         self._email_map_cache = None
         self._client_records_cache = None
+        self._name_map_cache = None
 
     # ----------------------------------------------------------------- IO
     def _build_email_map(self):
@@ -67,6 +68,14 @@ class Matcher:
     def _word_match(self, search_term: str, text: str) -> bool:
         return word_match(search_term, text)
 
+    def client_name(self, client_id):
+        """Nombre del cliente resuelto desde cache (sin query — mata el N+1)."""
+        if client_id is None:
+            return None
+        if self._name_map_cache is None:
+            self._name_map_cache = {c.id: c.name for c in self._client_records()}
+        return self._name_map_cache.get(client_id)
+
     # ----------------------------------------------------------- API legacy
     def match_appointment(self, appointment_data: dict) -> dict:
         """Clasifica y devuelve el contrato legacy.
@@ -86,7 +95,12 @@ class Matcher:
 
     @staticmethod
     def _to_legacy(result) -> dict:
-        """Mapea la categoría del dominio al match_status legacy."""
+        """Mapea la categoría del dominio al match_status legacy.
+
+        Incluye la categoría rica (`category`) ADEMÁS del match_status legacy,
+        para que el ETL pueda persistirla sin romper el esquema existente.
+        """
+        category = result.category.value
         if result.category is MeetingCategory.CLIENTE:
             status = "CONFIRMED" if result.confidence >= 0.90 else "PROBABLE"
             return {
@@ -94,6 +108,7 @@ class Matcher:
                 "matched_client_id": result.matched_client_id,
                 "match_reason": result.reason,
                 "match_confidence": result.confidence,
+                "category": category,
             }
         if result.category is MeetingCategory.INTERNO:
             return {
@@ -101,6 +116,7 @@ class Matcher:
                 "matched_client_id": None,
                 "match_reason": result.reason,
                 "match_confidence": 1.0,
+                "category": category,
             }
         # PERSONAL / VACACIONES / EVENTO / SIN_CLASIFICAR → NO_MATCH (legacy)
         return {
@@ -108,4 +124,5 @@ class Matcher:
             "matched_client_id": None,
             "match_reason": result.reason,
             "match_confidence": 0.0,
+            "category": category,
         }

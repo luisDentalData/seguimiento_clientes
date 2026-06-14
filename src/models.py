@@ -54,6 +54,8 @@ class Appointment(Base):
     match_status = Column(String) # CONFIRMED, PROBABLE, NO_MATCH, INTERNAL
     match_confidence = Column(Float, nullable=True)
     match_reason = Column(String, nullable=True)
+    # Taxonomía rica (Change 5): CLIENTE/INTERNO/VACACIONES/EVENTO/PERSONAL/SIN_CLASIFICAR
+    category = Column(String, nullable=True, index=True)
 
     matched_client_id = Column(String, ForeignKey("clients.id"), nullable=True)  # Cambiado a String para coincidir con Client.id
     matched_client = relationship("Client", back_populates="appointments")

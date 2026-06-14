@@ -46,9 +46,13 @@ def test_baseline_migration_crea_esquema(ephemeral_db_url, monkeypatch):
 
     engine = create_engine(ephemeral_db_url)
     try:
-        tables = set(inspect(engine).get_table_names())
+        insp = inspect(engine)
+        tables = set(insp.get_table_names())
+        appt_columns = {c["name"] for c in insp.get_columns("appointments")}
     finally:
         engine.dispose()
 
     assert {"clients", "client_emails", "appointments"}.issubset(tables)
     assert "alembic_version" in tables
+    # La migración a1b2c3d4e5f6 agrega la columna category
+    assert "category" in appt_columns

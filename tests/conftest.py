@@ -48,6 +48,9 @@ def engine():
     admin_engine.dispose()
 
     eng = create_engine(TEST_DATABASE_URL)
+    # Recrear el esquema desde los modelos para que SIEMPRE esté al día
+    # (create_all NO agrega columnas nuevas a tablas preexistentes).
+    Base.metadata.drop_all(eng)
     Base.metadata.create_all(eng)
     yield eng
     eng.dispose()
