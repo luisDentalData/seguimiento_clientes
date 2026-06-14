@@ -24,9 +24,11 @@ export default function SyncButton() {
         setStatus('idle');
         setMessage('');
       }, 5000);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const detailMsg =
+        (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setStatus('error');
-      setMessage(error.response?.data?.detail || 'Error al actualizar datos');
+      setMessage(detailMsg || 'Error al actualizar datos');
 
       // Limpiar mensaje después de 5 segundos
       setTimeout(() => {

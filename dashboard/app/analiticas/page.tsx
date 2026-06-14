@@ -7,7 +7,7 @@ import Header from '@/components/Header';
 import FilterBar from '@/components/FilterBar';
 import { api } from '@/lib/api';
 import type { Appointment, SummaryStats } from '@/lib/types';
-import { format, startOfMonth, eachMonthOfInterval, parseISO, subMonths } from 'date-fns';
+import { format, startOfMonth, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
   BarChart,
@@ -21,8 +21,6 @@ import {
   PieChart as RePieChart,
   Pie,
   Cell,
-  LineChart,
-  Line,
 } from 'recharts';
 
 const fetcher = (url: string) => api.get(url).then(res => res.data);

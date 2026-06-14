@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import dynamic from 'next/dynamic';
+import { useEffect, useRef } from 'react';
+import L, { type LeafletMouseEvent } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import type { LeafletMouseEvent } from 'leaflet';
 
 interface SpainMapLeafletProps {
   provinceData: {
@@ -104,15 +103,11 @@ const PROVINCE_COORDINATES: Record<string, [number, number]> = {
 };
 
 function SpainMapLeafletComponent({ provinceData, onProvinceClick, selectedProvince }: SpainMapLeafletProps) {
-  const [map, setMap] = useState<any>(null);
+  const mapRef = useRef<L.Map | null>(null);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const L = require('leaflet');
-
-    // Fix para los iconos de Leaflet
-    delete (L.Icon.Default.prototype as any)._getIconUrl;
+    // Fix para los iconos de Leaflet (la propiedad _getIconUrl no está tipada)
+    delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
     L.Icon.Default.mergeOptions({
       iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
       iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
@@ -128,20 +123,20 @@ function SpainMapLeafletComponent({ provinceData, onProvinceClick, selectedProvi
       maxZoom: 20
     }).addTo(mapInstance);
 
-    setMap(mapInstance);
+    mapRef.current = mapInstance;
 
     return () => {
       mapInstance.remove();
+      mapRef.current = null;
     };
   }, []);
 
   useEffect(() => {
-    if (!map || typeof window === 'undefined') return;
-
-    const L = require('leaflet');
+    const map = mapRef.current;
+    if (!map) return;
 
     // Limpiar marcadores previos
-    map.eachLayer((layer: any) => {
+    map.eachLayer((layer: L.Layer) => {
       if (layer instanceof L.CircleMarker) {
         map.removeLayer(layer);
       }
@@ -219,7 +214,7 @@ function SpainMapLeafletComponent({ provinceData, onProvinceClick, selectedProvi
         });
       });
     });
-  }, [map, provinceData, selectedProvince, onProvinceClick]);
+  }, [provinceData, selectedProvince, onProvinceClick]);
 
   return (
     <div className="relative w-full h-full">
@@ -245,15 +240,6 @@ function SpainMapLeafletComponent({ provinceData, onProvinceClick, selectedProvi
   );
 }
 
-// Exportar como componente dinámico (sin SSR)
-export default dynamic(() => Promise.resolve(SpainMapLeafletComponent), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-full flex items-center justify-center bg-slate-900/50 rounded-lg">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
-        <p className="text-slate-400">Cargando mapa...</p>
-      </div>
-    </div>
-  ),
-});
+// El ssr:false y el loading viven en la página que lo importa (app/mapa/page.tsx)
+// vía dynamic(). Acá exportamos el componente directo.
+export default SpainMapLeafletComponent;

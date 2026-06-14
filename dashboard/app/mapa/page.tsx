@@ -1,14 +1,29 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import useSWR from 'swr';
 import { MapPin, TrendingUp, Building, Map } from 'lucide-react';
 import Header from '@/components/Header';
 import FilterBar from '@/components/FilterBar';
-import SpainMapLeaflet from '@/components/SpainMapLeaflet';
 import { api } from '@/lib/api';
 import type { Appointment, ClientWithMeetings } from '@/lib/types';
 import { format } from 'date-fns';
+
+// El mapa solo se carga en el navegador (Leaflet necesita window).
+// Import dinámico REAL con ssr:false → el módulo nunca se evalúa en el servidor,
+// lo que permite usar `import L from 'leaflet'` de forma segura en el componente.
+const SpainMapLeaflet = dynamic(() => import('@/components/SpainMapLeaflet'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full flex items-center justify-center bg-slate-900/50 rounded-lg">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
+        <p className="text-slate-400">Cargando mapa...</p>
+      </div>
+    </div>
+  ),
+});
 
 const fetcher = (url: string) => api.get(url).then(res => res.data);
 

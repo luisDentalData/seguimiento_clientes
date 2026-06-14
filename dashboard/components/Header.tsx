@@ -1,7 +1,5 @@
 'use client';
 
-import { Filter, Calendar } from 'lucide-react';
-
 interface HeaderProps {
   title: string;
   subtitle?: string;
