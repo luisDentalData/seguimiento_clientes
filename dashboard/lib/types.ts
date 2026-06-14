@@ -67,3 +67,19 @@ export interface ClientWithoutMeetings {
     programa?: string;
     provincia?: string;
 }
+
+// Respuesta de GET /clients/portfolio — estado calculado en el BACKEND.
+export type ClientStatus = 'OK' | 'ATTENTION' | 'CRITICAL';
+
+export interface PortfolioClient {
+    id: string;
+    name: string;
+    nombre_contacto?: string | null;
+    programa?: string | null;
+    provincia?: string | null;
+    last_session: string | null;   // ISO date o null
+    days_since: number | null;     // null si nunca tuvo sesión válida
+    valid_sessions: number;
+    last_analyst: string | null;
+    status: ClientStatus;
+}
