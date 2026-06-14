@@ -29,6 +29,17 @@ class Client(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class Analyst(Base):
+    __tablename__ = "analysts"
+
+    email = Column(String, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True, server_default='true', index=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class ClientEmail(Base):
     __tablename__ = "client_emails"
 

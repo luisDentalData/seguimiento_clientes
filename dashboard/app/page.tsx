@@ -7,6 +7,7 @@ import Header from '@/components/Header';
 import FilterBar from '@/components/FilterBar';
 import MetricCard from '@/components/MetricCard';
 import { api } from '@/lib/api';
+import { useAnalysts } from '@/lib/useAnalysts';
 import type { SummaryStats } from '@/lib/types';
 
 const fetcher = (url: string) => api.get(url).then(res => res.data);
@@ -14,6 +15,7 @@ const fetcher = (url: string) => api.get(url).then(res => res.data);
 export default function HomePage() {
   const [selectedAnalyst, setSelectedAnalyst] = useState('all');
   const [selectedMonth, setSelectedMonth] = useState('all');
+  const { nameByEmail } = useAnalysts();
 
   // Fetch data
   const { data: stats, error, isLoading } = useSWR<SummaryStats>(
@@ -97,10 +99,7 @@ export default function HomePage() {
               ? (analyst.confirmed_meetings / analyst.total_appointments) * 100
               : 0;
 
-            const analystName = analyst.analyst === 'u.barroso@dentaldata.es' ? 'Úrsula Barroso' :
-                               analyst.analyst === 'm.val@dentaldata.es' ? 'Marta Val' :
-                               analyst.analyst === 'c.bosom@dentaldata.es' ? 'Carolina Bosom' :
-                               analyst.analyst;
+            const analystName = nameByEmail(analyst.analyst);
 
             return (
               <div key={analyst.analyst} className="space-y-2">

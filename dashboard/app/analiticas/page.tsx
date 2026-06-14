@@ -6,6 +6,7 @@ import { TrendingUp, Calendar, Users, Target, BarChart3, PieChart } from 'lucide
 import Header from '@/components/Header';
 import FilterBar from '@/components/FilterBar';
 import { api } from '@/lib/api';
+import { useAnalysts } from '@/lib/useAnalysts';
 import type { Appointment, SummaryStats, CategoryStats } from '@/lib/types';
 import { format, startOfMonth, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -45,6 +46,7 @@ export default function AnaliticasPage() {
   // Carga por categoría (backend agrega; total/analista respetan filtros, mes ignora el mes)
   const categoryStatsKey = `/stats/categories?analyst_email=${selectedAnalyst}&month=${selectedMonth}`;
   const { data: categoryStats } = useSWR<CategoryStats>(categoryStatsKey, fetcher, { refreshInterval: 30000 });
+  const { nameByEmail } = useAnalysts();
 
   // Filter appointments
   const filteredAppointments = useMemo(() => {
@@ -118,9 +120,7 @@ export default function AnaliticasPage() {
     if (!stats) return [];
 
     return stats.analyst_stats.map(analyst => {
-      const name = analyst.analyst === 'u.barroso@dentaldata.es' ? 'Úrsula' :
-                   analyst.analyst === 'm.val@dentaldata.es' ? 'Marta' :
-                   analyst.analyst === 'c.bosom@dentaldata.es' ? 'Carolina' : analyst.analyst;
+      const name = nameByEmail(analyst.analyst);
 
       const effectiveness = analyst.total_appointments > 0
         ? (analyst.confirmed_meetings / analyst.total_appointments) * 100
@@ -133,7 +133,7 @@ export default function AnaliticasPage() {
         efectividad: parseFloat(effectiveness.toFixed(1)),
       };
     });
-  }, [stats]);
+  }, [stats, nameByEmail]);
 
   // Status distribution for pie chart
   const statusDistribution = useMemo(() => {
@@ -211,14 +211,7 @@ export default function AnaliticasPage() {
       .slice(0, 10);
   }, [filteredAppointments]);
 
-  const getAnalystName = (email: string) => {
-    const names: Record<string, string> = {
-      'u.barroso@dentaldata.es': 'Úrsula Barroso',
-      'm.val@dentaldata.es': 'Marta Val',
-      'c.bosom@dentaldata.es': 'Carolina Bosom',
-    };
-    return names[email] || email;
-  };
+  const getAnalystName = nameByEmail;
 
   // Transforms para los gráficos de carga por categoría
   const categoryTotal = useMemo(() => {
@@ -238,7 +231,7 @@ export default function AnaliticasPage() {
       CATEGORY_META.forEach(m => { obj[m.key] = row.categories[m.key] ?? 0; });
       return obj;
     });
-  }, [categoryStats]);
+  }, [categoryStats, getAnalystName]);
 
   const categoryByMonth = useMemo(() => {
     if (!categoryStats) return [];

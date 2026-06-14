@@ -11,6 +11,7 @@ from src.config import ANALYST_EMAILS, DEFAULT_START_DATE, DEFAULT_END_DATE
 from src.services.gcal import GCalService
 from src.services.matching import Matcher
 from src.services.clinic_sync import sync_clinic_groups
+from src.services.analyst_admin import active_analyst_emails
 from src.domain.sync.groups import SYNC_GROUPS
 from src.models import Appointment
 from src.etl_logger import ETLLogger
@@ -36,11 +37,12 @@ def run_etl():
         total_matched = 0
 
         # DIRECT CALENDAR STRATEGY
-        # Query each analyst's calendar directly to get all their events.
-        logger.info(f"Fetching events directly from {len(ANALYST_EMAILS)} analyst calendars...")
+        # Analistas activas desde la DB; fallback al env var si la tabla está vacía.
+        analyst_emails = active_analyst_emails(db) or ANALYST_EMAILS
+        logger.info(f"Fetching events directly from {len(analyst_emails)} analyst calendars...")
 
         all_events = []
-        for analyst_email in ANALYST_EMAILS:
+        for analyst_email in analyst_emails:
             logger.log_fetching_start(analyst_email)
             try:
                 events = gcal.get_events(analyst_email, start_date, end_date)

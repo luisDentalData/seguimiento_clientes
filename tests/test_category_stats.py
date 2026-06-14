@@ -4,7 +4,7 @@ Cubren: total, por analista, por mes (ignora filtro de mes), filtros y NULL→SI
 """
 from datetime import datetime
 
-from src.models import Appointment
+from src.models import Analyst, Appointment
 from src.services.category_stats import get_category_stats
 
 
@@ -23,6 +23,10 @@ def _appt(db, appt_id, category, analyst, when):
 
 
 def _seed(db):
+    # Analistas activas (necesarias para que aparezcan en el desglose por analista)
+    db.add(Analyst(email="a@dd.es", name="Analista A", is_active=True))
+    db.add(Analyst(email="b@dd.es", name="Analista B", is_active=True))
+    db.flush()
     # Noviembre 2025
     _appt(db, "n1", "CLIENTE", "a@dd.es", datetime(2025, 11, 5))
     _appt(db, "n2", "CLIENTE", "a@dd.es", datetime(2025, 11, 6))

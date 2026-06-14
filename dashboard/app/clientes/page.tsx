@@ -6,6 +6,7 @@ import { Users, Search, Calendar, Clock, AlertCircle, CheckCircle2, AlertTriangl
 import Header from '@/components/Header';
 import ClientFormModal from '@/components/ClientFormModal';
 import { api } from '@/lib/api';
+import { useAnalysts } from '@/lib/useAnalysts';
 import type { PortfolioClient, ClientStatus, Appointment } from '@/lib/types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -123,17 +124,10 @@ export default function ClientesPage() {
       .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
   }, [clientMeetings]);
 
-  const analystNames: Record<string, string> = {
-    'u.barroso@dentaldata.es': 'Úrsula',
-    'm.val@dentaldata.es': 'm.val',
-    'c.bosom@dentaldata.es': 'c.bosom',
-  };
-
+  const { active: activeAnalysts, nameByEmail } = useAnalysts();
   const analysts = [
     { value: 'all', label: 'Todos los analistas' },
-    { value: 'u.barroso@dentaldata.es', label: 'Úrsula' },
-    { value: 'm.val@dentaldata.es', label: 'm.val' },
-    { value: 'c.bosom@dentaldata.es', label: 'c.bosom' },
+    ...activeAnalysts.map(a => ({ value: a.email, label: a.name })),
   ];
 
   const cycleDateSort = () => {
@@ -496,7 +490,7 @@ export default function ClientesPage() {
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-slate-500">Analista:</span>
                             <span className="px-2 py-1 bg-blue-500/20 text-blue-300 rounded text-xs">
-                              {analystNames[meeting.analyst_email] || meeting.analyst_email.split('@')[0]}
+                              {nameByEmail(meeting.analyst_email)}
                             </span>
                           </div>
                         </div>

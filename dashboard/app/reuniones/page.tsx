@@ -6,6 +6,7 @@ import { Calendar, Users, Clock, Mail, MapPin, Building, Filter } from 'lucide-r
 import Header from '@/components/Header';
 import FilterBar from '@/components/FilterBar';
 import { api } from '@/lib/api';
+import { useAnalysts } from '@/lib/useAnalysts';
 import type { Appointment } from '@/lib/types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -14,6 +15,7 @@ const fetcher = (url: string) => api.get(url).then(res => res.data);
 
 export default function ReunionesPage() {
   const [selectedAnalyst, setSelectedAnalyst] = useState('all');
+  const { nameByEmail } = useAnalysts();
   const [selectedMonth, setSelectedMonth] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
 
@@ -63,14 +65,7 @@ export default function ReunionesPage() {
     return labels[status as keyof typeof labels] || status;
   };
 
-  const getAnalystName = (email: string) => {
-    const names: Record<string, string> = {
-      'u.barroso@dentaldata.es': 'Úrsula Barroso',
-      'm.val@dentaldata.es': 'Marta Val',
-      'c.bosom@dentaldata.es': 'Carolina Bosom',
-    };
-    return names[email] || email;
-  };
+  const getAnalystName = nameByEmail;
 
   const monthLabel = selectedMonth === 'all' ? 'todos los meses' :
     selectedMonth === '2025-09' ? 'Septiembre 2025' :

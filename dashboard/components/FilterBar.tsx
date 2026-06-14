@@ -1,13 +1,13 @@
 'use client';
 
 import { Calendar, User } from 'lucide-react';
+import { useAnalysts } from '@/lib/useAnalysts';
 
 interface FilterBarProps {
   selectedAnalyst: string;
   onAnalystChange: (analyst: string) => void;
   selectedMonth: string;
   onMonthChange: (month: string) => void;
-  analysts?: string[];
 }
 
 const months = [
@@ -33,15 +33,13 @@ export default function FilterBar({
   onAnalystChange,
   selectedMonth,
   onMonthChange,
-  analysts = ['all', 'u.barroso@dentaldata.es', 'm.val@dentaldata.es', 'c.bosom@dentaldata.es']
 }: FilterBarProps) {
-
-  const analystNames: Record<string, string> = {
-    'all': 'Todos los analistas',
-    'u.barroso@dentaldata.es': 'Úrsula Barroso',
-    'm.val@dentaldata.es': 'Marta Val',
-    'c.bosom@dentaldata.es': 'Carolina Bosom'
-  };
+  // Analistas activas desde la DB (sin hardcodeo).
+  const { active } = useAnalysts();
+  const analystOptions = [
+    { value: 'all', label: 'Todos los analistas' },
+    ...active.map(a => ({ value: a.email, label: a.name })),
+  ];
 
   return (
     <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl p-4 mb-6">
@@ -57,9 +55,9 @@ export default function FilterBar({
             onChange={(e) => onAnalystChange(e.target.value)}
             className="w-full bg-slate-900 border border-slate-600 text-slate-200 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
           >
-            {analysts.map(analyst => (
-              <option key={analyst} value={analyst}>
-                {analystNames[analyst] || analyst}
+            {analystOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
               </option>
             ))}
           </select>

@@ -36,6 +36,14 @@ class ClientAdminCreate(BaseModel):
     nombres_alternativos: List[str] = []
     emails: List[str] = []
 
+class AnalystCreate(BaseModel):
+    email: str
+    name: str
+
+class AnalystUpdate(BaseModel):
+    name: Optional[str] = None
+    is_active: Optional[bool] = None
+
 class ClientAdminUpdate(BaseModel):
     name: Optional[str] = None
     nombre_contacto: Optional[str] = None

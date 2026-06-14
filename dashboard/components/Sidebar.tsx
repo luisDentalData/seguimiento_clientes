@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Calendar, Users, MapPin, BarChart3, Home } from 'lucide-react';
+import { Calendar, Users, MapPin, BarChart3, Home, Settings } from 'lucide-react';
 
 const navigation = [
   { name: 'Inicio', href: '/', icon: Home },
@@ -10,6 +10,7 @@ const navigation = [
   { name: 'Clientes', href: '/clientes', icon: Users },
   { name: 'Mapa Provincial', href: '/mapa', icon: MapPin },
   { name: 'Analíticas', href: '/analiticas', icon: BarChart3 },
+  { name: 'Configuración', href: '/configuracion', icon: Settings },
 ];
 
 export default function Sidebar() {

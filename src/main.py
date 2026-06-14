@@ -8,11 +8,15 @@ from datetime import datetime
 import os
 
 from src.database import get_db
-from src.models import Appointment as AppointmentModel, Client as ClientModel
-from src.schemas import Appointment, Client, ClientAdminCreate, ClientAdminUpdate
+from src.models import Appointment as AppointmentModel, Client as ClientModel, Analyst as AnalystModel
+from src.schemas import (
+    Appointment, Client, ClientAdminCreate, ClientAdminUpdate,
+    AnalystCreate, AnalystUpdate,
+)
 from src.services.portfolio import get_client_portfolio
 from src.services.category_stats import get_category_stats
 from src.services import client_admin
+from src.services import analyst_admin
 
 app = FastAPI(title="Dental Data Tracking API")
 
@@ -171,10 +175,16 @@ def get_summary_stats(db: Session = Depends(get_db)):
     ).group_by(AppointmentModel.match_status).all()
 
     # Appointments por analista
+    # Solo analistas activas (las inactivas se ocultan como dimensión)
+    active_analyst_emails_list = [
+        e for (e,) in db.query(AnalystModel.email).filter(AnalystModel.is_active == True).all()
+    ]
     analyst_stats = db.query(
         AppointmentModel.analyst_email,
         func.count(AppointmentModel.id).label('total'),
         func.sum(func.cast(AppointmentModel.is_client_meeting, Integer)).label('confirmed')
+    ).filter(
+        AppointmentModel.analyst_email.in_(active_analyst_emails_list)
     ).group_by(AppointmentModel.analyst_email).all()
 
     return {
@@ -221,6 +231,58 @@ def get_clients_portfolio(
         }
         for e in entries
     ]
+
+
+def _analyst_error_to_http(exc: analyst_admin.AnalystAdminError) -> HTTPException:
+    if isinstance(exc, analyst_admin.AnalystNotFoundError):
+        return HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, analyst_admin.DuplicateAnalystError):
+        return HTTPException(status_code=409, detail=str(exc))
+    return HTTPException(status_code=400, detail=str(exc))
+
+
+def _analyst_dict(a) -> dict:
+    return {"email": a.email, "name": a.name, "is_active": a.is_active}
+
+
+@app.get("/analysts")
+def list_analysts_endpoint(active_only: bool = False, db: Session = Depends(get_db)):
+    """Lista de analistas. active_only=true para dropdowns; sin él incluye inactivas
+    (para resolver nombres en vistas históricas)."""
+    return [_analyst_dict(a) for a in analyst_admin.list_analysts(db, active_only=active_only)]
+
+
+@app.post("/analysts", status_code=201)
+def create_analyst_endpoint(payload: AnalystCreate, db: Session = Depends(get_db)):
+    try:
+        analyst = analyst_admin.create_analyst(db, payload.email, payload.name)
+        db.commit()
+    except analyst_admin.AnalystAdminError as exc:
+        db.rollback()
+        raise _analyst_error_to_http(exc)
+    return _analyst_dict(analyst)
+
+
+@app.put("/analysts/{email}")
+def update_analyst_endpoint(email: str, payload: AnalystUpdate, db: Session = Depends(get_db)):
+    try:
+        analyst = analyst_admin.update_analyst(db, email, name=payload.name, is_active=payload.is_active)
+        db.commit()
+    except analyst_admin.AnalystAdminError as exc:
+        db.rollback()
+        raise _analyst_error_to_http(exc)
+    return _analyst_dict(analyst)
+
+
+@app.post("/analysts/{email}/deactivate")
+def deactivate_analyst_endpoint(email: str, db: Session = Depends(get_db)):
+    try:
+        analyst = analyst_admin.deactivate_analyst(db, email)
+        db.commit()
+    except analyst_admin.AnalystAdminError as exc:
+        db.rollback()
+        raise _analyst_error_to_http(exc)
+    return _analyst_dict(analyst)
 
 
 @app.get("/stats/categories")

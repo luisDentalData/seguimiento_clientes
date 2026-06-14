@@ -16,7 +16,7 @@ from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..models import Appointment as A
+from ..models import Analyst, Appointment as A
 
 _UNCLASSIFIED = "SIN_CLASIFICAR"
 
@@ -45,8 +45,13 @@ def get_category_stats(
         total_agg[_cat(category)] = total_agg.get(_cat(category), 0) + count
     total = [{"category": c, "count": n} for c, n in total_agg.items()]
 
-    # --- by_analyst: filtra analista + mes ---
-    analyst_q = db.query(A.analyst_email, A.category, func.count(A.id))
+    # --- by_analyst: filtra analista + mes; SOLO analistas activas (dimensión) ---
+    active_emails = [
+        e for (e,) in db.query(Analyst.email).filter(Analyst.is_active.is_(True)).all()
+    ]
+    analyst_q = db.query(A.analyst_email, A.category, func.count(A.id)).filter(
+        A.analyst_email.in_(active_emails)
+    )
     if analyst_email:
         analyst_q = analyst_q.filter(A.analyst_email == analyst_email)
     if month:
