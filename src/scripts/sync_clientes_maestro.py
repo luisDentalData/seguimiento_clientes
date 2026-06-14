@@ -24,7 +24,8 @@ sys.path.append(
 )
 
 from src.database import SessionLocal  # noqa: E402
-from src.models import Client, ClientEmail  # noqa: E402
+from src.models import Client  # noqa: E402
+from src.services.client_admin import set_client_emails  # noqa: E402
 
 # Columnas del cliente que se sincronizan desde el maestro.
 CLIENT_COLUMNS = [
@@ -102,34 +103,13 @@ def sync_clientes(db: Session, clientes_data: list[dict]) -> dict:
         if not client_id:
             continue
 
-        desired = {e.lower().strip() for e in (data.get("emails") or []) if e}
-
-        existing = (
-            db.query(ClientEmail).filter(ClientEmail.client_id == client_id).all()
+        # Bulk: reassign=True (un email de otro cliente se reasigna, no se rechaza).
+        email_stats = set_client_emails(
+            db, client_id, data.get("emails") or [], reassign=True
         )
-        existing_map = {ce.email: ce for ce in existing}
-
-        # Eliminar huérfanos (emails que ya no figuran para este cliente)
-        for email, ce in existing_map.items():
-            if email not in desired:
-                db.delete(ce)
-                stats["emails_removed"] += 1
-
-        # Altas y reasignaciones
-        for email in desired:
-            if email in existing_map:
-                continue
-            other = (
-                db.query(ClientEmail).filter(ClientEmail.email == email).first()
-            )
-            if other is not None:
-                if other.client_id != client_id:
-                    other.client_id = client_id
-                    stats["emails_reassigned"] += 1
-            else:
-                db.add(ClientEmail(client_id=client_id, email=email))
-                stats["emails_added"] += 1
-
+        stats["emails_added"] += email_stats["emails_added"]
+        stats["emails_removed"] += email_stats["emails_removed"]
+        stats["emails_reassigned"] += email_stats["emails_reassigned"]
         db.flush()
 
     return stats

@@ -9,8 +9,9 @@ import os
 
 from src.database import get_db
 from src.models import Appointment as AppointmentModel, Client as ClientModel
-from src.schemas import Appointment, Client
+from src.schemas import Appointment, Client, ClientAdminCreate, ClientAdminUpdate
 from src.services.portfolio import get_client_portfolio
+from src.services import client_admin
 
 app = FastAPI(title="Dental Data Tracking API")
 
@@ -97,6 +98,51 @@ def get_clients(skip: int = 0, limit: int = 100, active_only: bool = True, db: S
     if active_only:
         query = query.filter(ClientModel.is_active == True)
     return query.offset(skip).limit(limit).all()
+
+
+def _client_admin_error_to_http(exc: client_admin.ClientAdminError) -> HTTPException:
+    if isinstance(exc, client_admin.ClientNotFoundError):
+        return HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, client_admin.DuplicateEmailError):
+        return HTTPException(status_code=409, detail=str(exc))
+    return HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/clients", status_code=201)
+def create_client_endpoint(payload: ClientAdminCreate, db: Session = Depends(get_db)):
+    """Crea un cliente (ID autogenerado) + sus emails. La DB es la fuente de verdad."""
+    try:
+        client = client_admin.create_client(db, payload.model_dump())
+        db.commit()
+    except client_admin.ClientAdminError as exc:
+        db.rollback()
+        raise _client_admin_error_to_http(exc)
+    return {"id": client.id, "name": client.name, "is_active": client.is_active}
+
+
+@app.put("/clients/{client_id}")
+def update_client_endpoint(client_id: str, payload: ClientAdminUpdate, db: Session = Depends(get_db)):
+    """Edita datos y/o emails de un cliente existente."""
+    try:
+        # exclude_unset: solo aplica los campos que el cliente envió.
+        client = client_admin.update_client(db, client_id, payload.model_dump(exclude_unset=True))
+        db.commit()
+    except client_admin.ClientAdminError as exc:
+        db.rollback()
+        raise _client_admin_error_to_http(exc)
+    return {"id": client.id, "name": client.name, "is_active": client.is_active}
+
+
+@app.post("/clients/{client_id}/deactivate")
+def deactivate_client_endpoint(client_id: str, db: Session = Depends(get_db)):
+    """Desactiva un cliente (soft-delete). No borra appointments."""
+    try:
+        client = client_admin.deactivate_client(db, client_id)
+        db.commit()
+    except client_admin.ClientAdminError as exc:
+        db.rollback()
+        raise _client_admin_error_to_http(exc)
+    return {"id": client.id, "name": client.name, "is_active": client.is_active}
 
 @app.get("/stats/summary")
 def get_summary_stats(db: Session = Depends(get_db)):
@@ -259,6 +305,34 @@ def get_clients_without_meetings(db: Session = Depends(get_db)):
         result.append(client_dict)
 
     return result
+
+
+@app.get("/clients/{client_id}")
+def get_client_detail(client_id: str, db: Session = Depends(get_db)):
+    """Detalle completo de un cliente (incluye emails) — para editar en la UI.
+
+    Declarado DESPUÉS de las rutas estáticas /clients/... para no eclipsarlas.
+    """
+    client = db.get(ClientModel, client_id)
+    if client is None:
+        raise HTTPException(status_code=404, detail=f"Cliente {client_id} no existe")
+    emails = [ce.email for ce in client.emails]
+    return {
+        "id": client.id,
+        "name": client.name,
+        "nombre_contacto": client.nombre_contacto,
+        "telefono": client.telefono,
+        "movil": client.movil,
+        "direccion": client.direccion,
+        "poblacion": client.poblacion,
+        "provincia": client.provincia,
+        "nif_cif": client.nif_cif,
+        "programa": client.programa,
+        "nombres_alternativos": client.nombres_alternativos or [],
+        "status": client.status,
+        "is_active": client.is_active,
+        "emails": emails,
+    }
 
 @app.post("/etl/run")
 async def run_etl_endpoint(background_tasks: BackgroundTasks):

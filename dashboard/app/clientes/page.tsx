@@ -2,8 +2,9 @@
 
 import { useState, useMemo } from 'react';
 import useSWR from 'swr';
-import { Users, Search, Calendar, Clock, AlertCircle, CheckCircle2, AlertTriangle, X, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Users, Search, Calendar, Clock, AlertCircle, CheckCircle2, AlertTriangle, X, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown, UserPlus, Pencil, Power } from 'lucide-react';
 import Header from '@/components/Header';
+import ClientFormModal from '@/components/ClientFormModal';
 import { api } from '@/lib/api';
 import type { PortfolioClient, ClientStatus, Appointment } from '@/lib/types';
 import { format } from 'date-fns';
@@ -17,6 +18,9 @@ export default function ClientesPage() {
   const [analystFilter, setAnalystFilter] = useState<string>('all');
   const [dateSort, setDateSort] = useState<'desc' | 'asc' | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formClientId, setFormClientId] = useState<string | null>(null);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   // Estado calculado en el BACKEND (una sola verdad). El analista se filtra
   // server-side; el resto (búsqueda/estado/orden) es solo presentación.
@@ -24,11 +28,36 @@ export default function ClientesPage() {
     ? '/clients/portfolio'
     : `/clients/portfolio?analyst_email=${encodeURIComponent(analystFilter)}`;
 
-  const { data: portfolio, error, isLoading } = useSWR<PortfolioClient[]>(
+  const { data: portfolio, error, isLoading, mutate } = useSWR<PortfolioClient[]>(
     portfolioKey,
     fetcher,
     { refreshInterval: 30000 }
   );
+
+  const openCreate = () => { setFormClientId(null); setFormOpen(true); };
+  const openEdit = (id: string) => { setFormClientId(id); setFormOpen(true); };
+
+  const handleSaved = (createdId: string | null) => {
+    mutate();
+    setSavedMsg(
+      createdId
+        ? `Cliente ${createdId} creado. Dale a "Sincronizar" para matchear sus reuniones.`
+        : 'Cliente actualizado.'
+    );
+  };
+
+  const handleDeactivate = async (id: string, name: string) => {
+    if (!window.confirm(`¿Desactivar a "${name}"? No se borra nada; deja de aparecer en el portfolio activo.`)) {
+      return;
+    }
+    try {
+      await api.post(`/clients/${id}/deactivate`);
+      mutate();
+      setSavedMsg(`Cliente ${name} desactivado.`);
+    } catch {
+      setSavedMsg('No se pudo desactivar el cliente. Reintentá.');
+    }
+  };
 
   // Historial de reuniones del cliente seleccionado (bajo demanda, no bulk).
   const { data: clientMeetings } = useSWR<Appointment[]>(
@@ -195,7 +224,20 @@ export default function ClientesPage() {
         </div>
       </div>
 
-      {/* Search Bar + Analyst Filter */}
+      {/* Aviso de éxito (alta/edición/desactivación) */}
+      {savedMsg && (
+        <div className="mb-6 bg-green-500/10 border border-green-500/40 rounded-xl p-4 flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-green-300">{savedMsg}</p>
+          </div>
+          <button onClick={() => setSavedMsg(null)} className="text-slate-400 hover:text-white">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Search Bar + Analyst Filter + Nuevo cliente */}
       <div className="flex gap-3 mb-6">
         <div className="relative flex-1">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -222,6 +264,13 @@ export default function ClientesPage() {
           </select>
           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
         </div>
+
+        <button
+          onClick={openCreate}
+          className="flex items-center gap-2 px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl transition-colors whitespace-nowrap"
+        >
+          <UserPlus className="w-5 h-5" /> Nuevo cliente
+        </button>
       </div>
 
       {/* Clients Table */}
@@ -345,17 +394,25 @@ export default function ClientesPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex gap-2">
                           <button
-                            className="p-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-lg transition-colors"
-                            title="Agendar reunión"
-                          >
-                            <Calendar className="w-4 h-4" />
-                          </button>
-                          <button
                             onClick={() => setSelectedClientId(client.id)}
                             className="p-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors"
                             title="Ver historial"
                           >
                             <Clock className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => openEdit(client.id)}
+                            className="p-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-lg transition-colors"
+                            title="Editar cliente"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeactivate(client.id, client.name)}
+                            className="p-2 bg-slate-700 hover:bg-red-500/30 text-slate-300 hover:text-red-300 rounded-lg transition-colors"
+                            title="Desactivar cliente"
+                          >
+                            <Power className="w-4 h-4" />
                           </button>
                         </div>
                       </td>
@@ -474,6 +531,15 @@ export default function ClientesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de alta/edición de cliente */}
+      {formOpen && (
+        <ClientFormModal
+          clientId={formClientId}
+          onClose={() => setFormOpen(false)}
+          onSaved={handleSaved}
+        />
       )}
     </div>
   );

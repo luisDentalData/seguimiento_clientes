@@ -22,6 +22,33 @@ class ClientBase(BaseModel):
 class ClientCreate(ClientBase):
     pass
 
+# Schemas para administración desde la UI (Change 08)
+class ClientAdminCreate(BaseModel):
+    name: str
+    nombre_contacto: Optional[str] = None
+    telefono: Optional[str] = None
+    movil: Optional[str] = None
+    direccion: Optional[str] = None
+    poblacion: Optional[str] = None
+    provincia: Optional[str] = None
+    nif_cif: Optional[str] = None
+    programa: Optional[str] = None
+    nombres_alternativos: List[str] = []
+    emails: List[str] = []
+
+class ClientAdminUpdate(BaseModel):
+    name: Optional[str] = None
+    nombre_contacto: Optional[str] = None
+    telefono: Optional[str] = None
+    movil: Optional[str] = None
+    direccion: Optional[str] = None
+    poblacion: Optional[str] = None
+    provincia: Optional[str] = None
+    nif_cif: Optional[str] = None
+    programa: Optional[str] = None
+    nombres_alternativos: Optional[List[str]] = None
+    emails: Optional[List[str]] = None
+
 class Client(ClientBase):
     id: str  # Changed from int to str (format: CLI_XXXXX)
     created_at: datetime
