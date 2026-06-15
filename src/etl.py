@@ -10,9 +10,8 @@ from src.database import SessionLocal
 from src.config import ANALYST_EMAILS, DEFAULT_START_DATE, DEFAULT_END_DATE
 from src.services.gcal import GCalService
 from src.services.matching import Matcher
-from src.services.clinic_sync import sync_clinic_groups
+from src.services.clinic_sync import sync_clinic_groups, build_groups_from_db
 from src.services.analyst_admin import active_analyst_emails
-from src.domain.sync.groups import SYNC_GROUPS
 from src.models import Appointment
 from src.etl_logger import ETLLogger
 
@@ -168,7 +167,7 @@ def run_etl():
         # Antes: ~600 líneas copy-paste. Ahora: una tabla de config + un loop.
         logger.info("=" * 60)
         logger.info("Sincronizando clínicas que comparten reuniones...")
-        sync_stats = sync_clinic_groups(db, SYNC_GROUPS)
+        sync_stats = sync_clinic_groups(db, build_groups_from_db(db))
         db.commit()
         for label, count in sync_stats.items():
             if count:

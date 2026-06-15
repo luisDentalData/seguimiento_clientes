@@ -36,6 +36,12 @@ class ClientAdminCreate(BaseModel):
     nombres_alternativos: List[str] = []
     emails: List[str] = []
 
+class GroupCreate(BaseModel):
+    name: str
+
+class GroupUpdate(BaseModel):
+    name: str
+
 class AnalystCreate(BaseModel):
     email: str
     name: str

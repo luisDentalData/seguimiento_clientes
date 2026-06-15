@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { UserPlus, Power, Pencil, CheckCircle2, AlertCircle } from 'lucide-react';
 import Header from '@/components/Header';
+import GroupsManager from '@/components/GroupsManager';
 import { api } from '@/lib/api';
 import { useAnalysts } from '@/lib/useAnalysts';
 
@@ -170,6 +171,9 @@ export default function ConfiguracionPage() {
           </table>
         </div>
       </div>
+
+      {/* Grupos de sedes que comparten reuniones */}
+      <GroupsManager />
     </div>
   );
 }

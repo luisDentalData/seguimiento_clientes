@@ -8,9 +8,9 @@ del bug Maxal (evento en el 2º miembro propaga al 1º). Contra Postgres real.
 IDs de cliente con prefijo DD- (como producción) para que la exclusión de
 duplicados (`'_DD-' in id`) funcione igual que en el sistema real.
 """
-from src.domain.sync.groups import SYNC_GROUPS, SyncGroup
-from src.models import Appointment
-from src.services.clinic_sync import sync_clinic_groups
+from src.domain.sync.groups import SyncGroup
+from src.models import Appointment, ClinicGroup, Client
+from src.services.clinic_sync import sync_clinic_groups, build_groups_from_db
 
 
 def _appt(db, appt_id, client_id, summary="reunion", category="CLIENTE"):
@@ -106,13 +106,20 @@ def test_excluye_duplicados_como_fuente(db_session, client_factory):
     assert db_session.get(Appointment, "otro_DD-90001_DD-90002") is None
 
 
-def test_config_real_maxal(db_session, client_factory):
-    """Smoke test con la config real: Getxo y Bilbao comparten reuniones."""
-    client_factory(id="DD-00010", name="Maxal Getxo")
-    client_factory(id="DD-00116", name="Maxal Bilbao")
-    _appt(db_session, "evt_maxal", "DD-00116")  # cae en Bilbao
+def test_build_groups_from_db_y_sync(db_session, client_factory):
+    """Los grupos se arman desde la DB (group_id) y el sync simétrico funciona."""
+    g = ClinicGroup(name="Maxal")
+    db_session.add(g)
+    db_session.flush()
+    a = client_factory(id="DD-90001", name="Maxal Getxo")
+    b = client_factory(id="DD-90002", name="Maxal Bilbao")
+    a.group_id = g.id
+    b.group_id = g.id
+    db_session.flush()
+    _appt(db_session, "evt_maxal", "DD-90002")  # cae en Bilbao
 
-    sync_clinic_groups(db_session, SYNC_GROUPS)
+    groups = build_groups_from_db(db_session)
+    sync_clinic_groups(db_session, groups)
     db_session.flush()
 
-    assert db_session.get(Appointment, "evt_maxal_DD-00010") is not None
+    assert db_session.get(Appointment, "evt_maxal_DD-90001") is not None

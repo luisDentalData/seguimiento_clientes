@@ -11,12 +11,13 @@ from src.database import get_db
 from src.models import Appointment as AppointmentModel, Client as ClientModel, Analyst as AnalystModel
 from src.schemas import (
     Appointment, Client, ClientAdminCreate, ClientAdminUpdate,
-    AnalystCreate, AnalystUpdate,
+    AnalystCreate, AnalystUpdate, GroupCreate, GroupUpdate,
 )
 from src.services.portfolio import get_client_portfolio
 from src.services.category_stats import get_category_stats
 from src.services import client_admin
 from src.services import analyst_admin
+from src.services import group_admin
 
 app = FastAPI(title="Dental Data Tracking API")
 
@@ -283,6 +284,74 @@ def deactivate_analyst_endpoint(email: str, db: Session = Depends(get_db)):
         db.rollback()
         raise _analyst_error_to_http(exc)
     return _analyst_dict(analyst)
+
+
+def _group_error_to_http(exc: group_admin.GroupAdminError) -> HTTPException:
+    if isinstance(exc, group_admin.GroupNotFoundError):
+        return HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, group_admin.DuplicateGroupError):
+        return HTTPException(status_code=409, detail=str(exc))
+    return HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/groups")
+def list_groups_endpoint(db: Session = Depends(get_db)):
+    return group_admin.list_groups(db)
+
+
+@app.post("/groups", status_code=201)
+def create_group_endpoint(payload: GroupCreate, db: Session = Depends(get_db)):
+    try:
+        g = group_admin.create_group(db, payload.name)
+        db.commit()
+    except group_admin.GroupAdminError as exc:
+        db.rollback()
+        raise _group_error_to_http(exc)
+    return {"id": g.id, "name": g.name}
+
+
+@app.put("/groups/{group_id}")
+def rename_group_endpoint(group_id: int, payload: GroupUpdate, db: Session = Depends(get_db)):
+    try:
+        g = group_admin.rename_group(db, group_id, payload.name)
+        db.commit()
+    except group_admin.GroupAdminError as exc:
+        db.rollback()
+        raise _group_error_to_http(exc)
+    return {"id": g.id, "name": g.name}
+
+
+@app.delete("/groups/{group_id}")
+def delete_group_endpoint(group_id: int, db: Session = Depends(get_db)):
+    try:
+        group_admin.delete_group(db, group_id)
+        db.commit()
+    except group_admin.GroupAdminError as exc:
+        db.rollback()
+        raise _group_error_to_http(exc)
+    return {"status": "deleted", "id": group_id}
+
+
+@app.post("/groups/{group_id}/members/{client_id}")
+def assign_member_endpoint(group_id: int, client_id: str, db: Session = Depends(get_db)):
+    try:
+        group_admin.assign_client(db, group_id, client_id)
+        db.commit()
+    except group_admin.GroupAdminError as exc:
+        db.rollback()
+        raise _group_error_to_http(exc)
+    return {"status": "assigned", "group_id": group_id, "client_id": client_id}
+
+
+@app.delete("/groups/{group_id}/members/{client_id}")
+def remove_member_endpoint(group_id: int, client_id: str, db: Session = Depends(get_db)):
+    try:
+        group_admin.remove_client(db, client_id)
+        db.commit()
+    except group_admin.GroupAdminError as exc:
+        db.rollback()
+        raise _group_error_to_http(exc)
+    return {"status": "removed", "client_id": client_id}
 
 
 @app.get("/stats/categories")

@@ -10,7 +10,25 @@ actualiza). NO hace commit (lo maneja el caller). Devuelve {label: nuevos}.
 """
 from sqlalchemy.orm import Session
 
-from ..models import Appointment
+from ..domain.sync.groups import SyncGroup
+from ..models import Appointment, Client, ClinicGroup
+
+
+def build_groups_from_db(db: Session) -> list:
+    """Arma los grupos de sync desde la DB (clients.group_id).
+
+    members = sedes del grupo (id, nombre). El nombre del cliente se usa como
+    label de trazabilidad. Un grupo con <2 sedes no sincroniza nada (se omite).
+    """
+    groups = []
+    for g in db.query(ClinicGroup).order_by(ClinicGroup.id).all():
+        members = [
+            (c.id, c.name)
+            for c in db.query(Client).filter(Client.group_id == g.id).order_by(Client.id).all()
+        ]
+        if len(members) >= 2:
+            groups.append(SyncGroup(g.name, tuple(members)))
+    return groups
 
 
 def _is_original(appointment_id: str) -> bool:

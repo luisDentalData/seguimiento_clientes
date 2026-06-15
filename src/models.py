@@ -21,6 +21,8 @@ class Client(Base):
     fuentes = Column(JSON)  # Lista de fuentes de datos
     status = Column(String, default="ACTIVE")  # ACTIVE or INACTIVE
     is_active = Column(Boolean, default=True, server_default='true', index=True)  # For filtering active clients
+    # Grupo de sedes que comparten reuniones (Change 12). NULL = sin grupo.
+    group_id = Column(Integer, ForeignKey("clinic_groups.id"), nullable=True, index=True)
 
     # Relationships
     emails = relationship("ClientEmail", back_populates="client", cascade="all, delete-orphan")
@@ -28,6 +30,16 @@ class Client(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class ClinicGroup(Base):
+    __tablename__ = "clinic_groups"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 
 class Analyst(Base):
     __tablename__ = "analysts"
