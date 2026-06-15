@@ -1,16 +1,25 @@
 """
 Test de la migración baseline de Alembic.
 Corre `alembic upgrade head` sobre una base EFÍMERA y verifica el esquema.
-Contra Postgres real (Docker).
+Contra Postgres real (mismo servidor que TEST_DATABASE_URL: local 5434 o CI 5432).
 """
+import os
+
 import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 
-_ADMIN_URL = "postgresql+pg8000://postgres:dentaldata@localhost:5434/postgres"
+# Deriva el servidor de TEST_DATABASE_URL (igual que conftest) en vez de
+# hardcodear el puerto local — así funciona tanto en local (5434) como en CI (5432).
+_TEST_URL = os.getenv(
+    "TEST_DATABASE_URL",
+    "postgresql+pg8000://postgres:dentaldata@localhost:5434/dentaldata_test",
+)
+_BASE = _TEST_URL.rsplit("/", 1)[0]
 _MIG_DB = "dentaldata_alembic_test"
-_MIG_URL = f"postgresql+pg8000://postgres:dentaldata@localhost:5434/{_MIG_DB}"
+_ADMIN_URL = f"{_BASE}/postgres"
+_MIG_URL = f"{_BASE}/{_MIG_DB}"
 
 
 def _drop_db(admin_engine):
