@@ -1,17 +1,15 @@
 """
-Sincronización de clínicas que comparten reuniones.
+Sincronización SIMÉTRICA de clínicas que comparten reuniones.
 
-Reemplaza los ~10 bloques copy-paste del ETL por un único loop guiado por
-configuración (`domain/sync/groups.py`). Para cada (fuente → destino) duplica
-los appointments con id compuesto `{id_fuente}_{id_destino}`, creando o
-actualizando según corresponda. Bidireccional para grupos como Triana.
+Para cada grupo, junta los appointments ORIGINALES de TODOS sus miembros y los
+replica al resto. Así, no importa a cuál sede el matcher haya asignado el
+evento: todas las sedes del grupo terminan con la unión de las reuniones.
 
-Precarga todos los appointments en memoria => sin N+1 dentro del sync.
-NO hace commit (lo maneja el caller). Devuelve {label: nuevos_creados}.
+Duplicado: id compuesto `{id_original}_{id_destino}`. Idempotente (crea o
+actualiza). NO hace commit (lo maneja el caller). Devuelve {label: nuevos}.
 """
 from sqlalchemy.orm import Session
 
-from ..domain.sync.groups import SyncGroup
 from ..models import Appointment
 
 
@@ -41,26 +39,8 @@ def _new_duplicate(source, dup_id: str, target_client_id: str, label: str) -> Ap
     return appt
 
 
-def _sync_pair(db, by_id, by_client, source_id, target_id, label) -> int:
-    """Sincroniza source_id → target_id. Devuelve cuántos appointments nuevos creó."""
-    created = 0
-    sources = [a for a in by_client.get(source_id, []) if _is_original(a.id)]
-    for src in sources:
-        dup_id = f"{src.id}_{target_id}"
-        existing = by_id.get(dup_id)
-        if existing is not None:
-            _copy_fields(existing, src, target_id, label)
-        else:
-            dup = _new_duplicate(src, dup_id, target_id, label)
-            db.add(dup)
-            by_id[dup_id] = dup
-            by_client.setdefault(target_id, []).append(dup)
-            created += 1
-    return created
-
-
 def sync_clinic_groups(db: Session, groups) -> dict:
-    """Aplica todos los grupos de sincronización. Devuelve {label: nuevos}."""
+    """Replica simétricamente las reuniones dentro de cada grupo de sedes."""
     appointments = db.query(Appointment).all()
     by_id = {a.id: a for a in appointments}
     by_client: dict = {}
@@ -69,14 +49,29 @@ def sync_clinic_groups(db: Session, groups) -> dict:
 
     stats: dict = {}
     for group in groups:
-        for target in group.targets:
-            stats[target.label] = _sync_pair(
-                db, by_id, by_client, group.source_id, target.client_id, target.label
-            )
-        if group.bidirectional and group.source_label:
-            for target in group.targets:
-                stats[group.source_label] = _sync_pair(
-                    db, by_id, by_client,
-                    target.client_id, group.source_id, group.source_label,
-                )
+        member_ids = [m[0] for m in group.members]
+        label_of = {cid: label for cid, label in group.members}
+
+        # Originales matcheados a CUALQUIER miembro del grupo.
+        originals = []
+        for mid in member_ids:
+            originals += [a for a in by_client.get(mid, []) if _is_original(a.id)]
+
+        # Replicar cada original al RESTO de los miembros.
+        for src in originals:
+            for dest_id in member_ids:
+                if dest_id == src.matched_client_id:
+                    continue
+                dup_id = f"{src.id}_{dest_id}"
+                label = label_of[dest_id]
+                existing = by_id.get(dup_id)
+                if existing is not None:
+                    _copy_fields(existing, src, dest_id, label)
+                else:
+                    dup = _new_duplicate(src, dup_id, dest_id, label)
+                    db.add(dup)
+                    by_id[dup_id] = dup
+                    by_client.setdefault(dest_id, []).append(dup)
+                    stats[label] = stats.get(label, 0) + 1
+
     return stats
