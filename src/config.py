@@ -8,6 +8,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+pg8000://postgres:password@
 
 # Google
 GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_CREDENTIALS_PATH", "credentials.json")
+GOOGLE_TOKEN_PATH = os.getenv("GOOGLE_TOKEN_PATH", "/secrets/token.pickle" if os.path.exists("/secrets") else "token.pickle")
 # Default to real analysts if not in env
 ANALYST_EMAILS = os.getenv("ANALYST_EMAILS", "u.barroso@dentaldata.es,m.val@dentaldata.es,c.bosom@dentaldata.es").split(",")
 IMPERSONATE_EMAIL = os.getenv("IMPERSONATE_EMAIL", "luis@dentaldata.es")

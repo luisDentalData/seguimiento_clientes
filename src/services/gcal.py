@@ -8,7 +8,7 @@ from google.oauth2 import service_account
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
-from ..config import GOOGLE_CREDENTIALS_PATH, IMPERSONATE_EMAIL
+from ..config import GOOGLE_CREDENTIALS_PATH, GOOGLE_TOKEN_PATH, IMPERSONATE_EMAIL
 
 SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
 
@@ -41,8 +41,8 @@ class GCalService:
         4. Autorizar Client ID en Admin Console → Security → API Controls
         """
 
-        # OAuth Token (preferido para desarrollo local)
-        token_path = 'token.pickle'
+        # OAuth Token (preferido para desarrollo local y Cloud Run via Secret Manager)
+        token_path = GOOGLE_TOKEN_PATH
         if os.path.exists(token_path):
             print("Loading OAuth token from pickle...")
 
@@ -52,19 +52,17 @@ class GCalService:
             if creds and creds.valid:
                 return creds
 
-            if creds and creds.expired and creds.refresh_token:
+            if creds and creds.refresh_token:
                 print("Refreshing OAuth token...")
+                creds.refresh(Request())  # updates creds in-place; always works
+                print("[OK] Token refreshed (in-memory)")
                 try:
-                    creds.refresh(Request())
-                    # Intentar guardar el token refrescado
                     with open(token_path, 'wb') as token:
                         pickle.dump(creds, token)
-                    print("[OK] Token refreshed and saved")
-                    return creds
-                except PermissionError:
-                    print("[ERROR] Cannot write token.pickle (read-only mount)")
-                    print("[INFO] Token expired but cannot refresh - using existing")
-                    return creds
+                    print("[OK] Token saved to disk")
+                except (PermissionError, OSError):
+                    print("[INFO] Cannot write token.pickle (read-only mount) — using in-memory token")
+                return creds
 
         # Service Account (fallback para producción)
         if os.path.exists(credentials_path):
