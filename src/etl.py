@@ -25,7 +25,6 @@ def run_etl():
 
     try:
         # Initialize Services
-        gcal = GCalService()
         matcher = Matcher(db)
 
         # Use config dates
@@ -44,6 +43,9 @@ def run_etl():
         for analyst_email in analyst_emails:
             logger.log_fetching_start(analyst_email)
             try:
+                # Impersonate each analyst so they can read their own calendar.
+                # A single shared service account without impersonation gets 404.
+                gcal = GCalService(impersonate_email=analyst_email)
                 events = gcal.get_events(analyst_email, start_date, end_date)
                 logger.log_fetching_result(analyst_email, len(events))
                 for event in events:
