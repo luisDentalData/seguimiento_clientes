@@ -12,22 +12,32 @@ url = os.environ.get("DATABASE_URL", "")
 try:
     engine = sqlalchemy.create_engine(url)
     with engine.connect() as conn:
-        # 1. Check if alembic_version table exists
+
+        # Check if alembic_version table exists
+        has_alembic = False
         try:
             conn.execute(sqlalchemy.text("SELECT 1 FROM alembic_version LIMIT 1"))
-            sys.exit(0)  # Alembic already tracking — just run upgrade head
+            has_alembic = True
         except Exception as e:
             err = str(e).lower()
             if not ("alembic_version" in err or "does not exist" in err or "no such table" in err):
                 print(f"[entrypoint] Unexpected DB error: {e}", file=sys.stderr)
                 sys.exit(2)
 
-        # 2. No alembic_version — check if core tables exist (pre-Alembic DB)
+        # Check if core tables actually exist
+        has_tables = False
         try:
             conn.execute(sqlalchemy.text("SELECT 1 FROM clients LIMIT 1"))
-            sys.exit(1)  # Tables exist but no Alembic tracking → stamp baseline
+            has_tables = True
         except Exception:
-            sys.exit(3)  # Completely fresh DB — no tables at all
+            pass
+
+        if has_alembic and has_tables:
+            sys.exit(0)  # Normal: Alembic tracking + tables exist → just upgrade head
+        elif not has_alembic and has_tables:
+            sys.exit(1)  # Pre-Alembic DB: tables exist but no tracking → stamp baseline
+        else:
+            sys.exit(3)  # Fresh or broken DB: no tables → create_all + stamp head
 
 except Exception as e:
     print(f"[entrypoint] Cannot connect to DB: {e}", file=sys.stderr)
