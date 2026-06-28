@@ -28,9 +28,6 @@ def run_etl() -> dict:
     db = SessionLocal()
 
     try:
-        # One GCalService for auth; get_events() calls are read-only and safe to
-        # share across threads (each execute() opens its own HTTP connection).
-        gcal = GCalService(impersonate_email=IMPERSONATE_EMAIL)
         matcher = Matcher(db)
 
         start_date = datetime.fromisoformat(DEFAULT_START_DATE.replace('Z', '+00:00'))
@@ -43,9 +40,13 @@ def run_etl() -> dict:
         lock = threading.Lock()
 
         def fetch_analyst(email: str) -> list:
+            # Each thread needs its own GCalService (its own HTTP transport).
+            # Sharing one service across threads causes mixed responses and broken
+            # pagination — confirmed by u.barroso getting 0 events in parallel run.
+            thread_gcal = GCalService(impersonate_email=IMPERSONATE_EMAIL)
             logger.log_fetching_start(email)
             try:
-                events = gcal.get_events(email, start_date, end_date)
+                events = thread_gcal.get_events(email, start_date, end_date)
                 logger.log_fetching_result(email, len(events))
                 for event in events:
                     event['_analyst_email'] = email
