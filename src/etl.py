@@ -7,7 +7,7 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.database import SessionLocal
-from src.config import ANALYST_EMAILS, DEFAULT_START_DATE, DEFAULT_END_DATE
+from src.config import ANALYST_EMAILS, DEFAULT_START_DATE, DEFAULT_END_DATE, IMPERSONATE_EMAIL
 from src.services.gcal import GCalService
 from src.services.matching import Matcher
 from src.services.clinic_sync import sync_clinic_groups, build_groups_from_db
@@ -25,6 +25,10 @@ def run_etl():
 
     try:
         # Initialize Services
+        # Impersonate IMPERSONATE_EMAIL (luis@dentaldata.es) — same as the local
+        # token.pickle flow. Luis has all analyst calendars shared, so he can
+        # read them. The service account alone (no impersonation) gets 404.
+        gcal = GCalService(impersonate_email=IMPERSONATE_EMAIL)
         matcher = Matcher(db)
 
         # Use config dates
@@ -43,9 +47,6 @@ def run_etl():
         for analyst_email in analyst_emails:
             logger.log_fetching_start(analyst_email)
             try:
-                # Impersonate each analyst so they can read their own calendar.
-                # A single shared service account without impersonation gets 404.
-                gcal = GCalService(impersonate_email=analyst_email)
                 events = gcal.get_events(analyst_email, start_date, end_date)
                 logger.log_fetching_result(analyst_email, len(events))
                 for event in events:
