@@ -52,8 +52,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # NEXT_PUBLIC_* se inyectan en el JavaScript durante npm run build
 # NOTA: No definir aquí para desarrollo local - se pasa desde docker-compose.yml
 # Solo se hardcodea para Google Cloud Run deployment
-# ARG NEXT_PUBLIC_API_URL=http://localhost:8000
-# ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_API_URL=https://dentaldata-backend-243744598910.us-central1.run.app
 
 # Para desarrollo local: usar localhost:8000 (pasado desde docker-compose)
 # Para Cloud Run: usar https://dentaldata-backend-243744598910.us-central1.run.app
