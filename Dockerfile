@@ -121,8 +121,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar el directorio src/ completo
 COPY src/ ./src/
 
-# Copiar el archivo de clientes maestros (datos iniciales)
-COPY clientes_maestro.json .
+# Copiar configuración y migraciones de Alembic
+COPY alembic.ini .
+COPY alembic/ ./alembic/
+
+# Copiar entrypoint (ejecuta migraciones antes de arrancar uvicorn)
+COPY entrypoint.sh .
 
 # Copiar el script de inicio en Python
 COPY start.py /app/start.py
@@ -136,7 +140,7 @@ COPY start.py /app/start.py
 # ETAPA 8: Crear Directorios Necesarios
 # ----------------------------------------------------------------------------
 # Crear directorio para logs (si no existe)
-RUN mkdir -p /app/logs
+RUN mkdir -p /app/logs && chmod +x /app/entrypoint.sh
 
 # -p: Crea directorios padres si no existen (no da error si ya existe)
 
@@ -203,7 +207,7 @@ EXPOSE 8000
 # No siempre es 8080, puede cambiar. Debemos usar $PORT.
 # Usamos shell form (no JSON array) para poder usar variables de entorno
 
-CMD ["sh", "-c", "python -m uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "entrypoint.sh"]
 
 # Explicación detallada:
 # - uvicorn src.main:app: Servidor ASGI para FastAPI
