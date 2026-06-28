@@ -106,7 +106,7 @@ jobs:
             --platform managed \
             --allow-unauthenticated \
             --set-cloudsql-instances=seguimientoclientes-483013:europe-southwest1:dentaldata-db \
-            --set-secrets="DATABASE_URL=dentaldata-db-url:latest,/secrets/credentials.json=google-credentials:latest,/secrets/token.pickle=google-oauth-token:latest" \
+            --set-secrets="DATABASE_URL=dentaldata-db-url:latest,/secrets/credentials.json=google-credentials:latest,/token/token.pickle=google-oauth-token:latest" \
             --env-vars-file=.env.yaml \
             --memory=512Mi \
             --cpu=1 \
