@@ -2,53 +2,53 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Calendar, Users, MapPin, BarChart3, Home, Settings } from 'lucide-react';
 
 const navigation = [
-  { name: 'Inicio', href: '/', icon: Home },
-  { name: 'Reuniones', href: '/reuniones', icon: Calendar },
-  { name: 'Clientes', href: '/clientes', icon: Users },
-  { name: 'Mapa Provincial', href: '/mapa', icon: MapPin },
-  { name: 'Analíticas', href: '/analiticas', icon: BarChart3 },
-  { name: 'Configuración', href: '/configuracion', icon: Settings },
+  { name: 'Inicio',           href: '/',             icon: 'home' },
+  { name: 'Reuniones',        href: '/reuniones',     icon: 'calendar_today' },
+  { name: 'Clientes',         href: '/clientes',      icon: 'group' },
+  { name: 'Mapa Provincial',  href: '/mapa',          icon: 'location_on' },
+  { name: 'Analíticas',       href: '/analiticas',    icon: 'bar_chart' },
+  { name: 'Configuración',    href: '/configuracion', icon: 'settings' },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <div className="fixed inset-y-0 left-0 z-50 w-64 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 border-r border-slate-700">
+    <div className="fixed inset-y-0 left-0 z-50 w-64 flex flex-col bg-surface border-r border-line">
       {/* Logo */}
-      <div className="flex h-16 items-center px-6 border-b border-slate-700">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-            <Calendar className="w-5 h-5 text-white" />
-          </div>
-          <span className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-            DentalData
-          </span>
-        </div>
+      <div className="flex h-14 items-center gap-2.5 px-5 border-b border-line shrink-0">
+        <span className="material-symbols-outlined text-boss-primary text-[22px] leading-none">
+          calendar_today
+        </span>
+        <span className="font-display font-bold text-lg text-fg tracking-tight">
+          DentalData
+        </span>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 px-3 py-4">
+      <nav className="flex-1 py-3 overflow-y-auto">
         {navigation.map((item) => {
           const isActive = pathname === item.href;
           return (
             <Link
               key={item.name}
               href={item.href}
-              className={`
-                group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all
-                ${isActive
-                  ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-500/50'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
-                }
-              `}
+              className={[
+                'flex items-center gap-3 px-5 py-2.5 text-sm font-medium transition-colors duration-base',
+                'border-l-2',
+                isActive
+                  ? 'border-boss-light bg-canvas/40 text-fg'
+                  : 'border-transparent text-fg-muted hover:text-fg hover:bg-canvas/20',
+              ].join(' ')}
             >
-              <item.icon
-                className={`mr-3 h-5 w-5 flex-shrink-0 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-white'}`}
-              />
+              <span
+                className="material-symbols-outlined text-[20px] leading-none shrink-0"
+                aria-hidden="true"
+              >
+                {item.icon}
+              </span>
               {item.name}
             </Link>
           );
@@ -56,11 +56,8 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="border-t border-slate-700 p-4">
-        <div className="text-xs text-slate-400 text-center">
-          <p>Sistema de Análisis</p>
-          <p className="text-slate-500">v1.0.0</p>
-        </div>
+      <div className="border-t border-line px-5 py-3 shrink-0">
+        <p className="text-xs text-fg-subtle text-center">Sistema de Análisis v1.0</p>
       </div>
     </div>
   );

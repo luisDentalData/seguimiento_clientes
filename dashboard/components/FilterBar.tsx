@@ -1,6 +1,5 @@
 'use client';
 
-import { Calendar, User } from 'lucide-react';
 import { useAnalysts } from '@/lib/useAnalysts';
 
 interface FilterBarProps {
@@ -11,7 +10,7 @@ interface FilterBarProps {
 }
 
 const months = [
-  { value: 'all', label: 'Todos los meses' },
+  { value: 'all',     label: 'Todos los meses' },
   { value: '2025-01', label: 'Enero 2025' },
   { value: '2025-02', label: 'Febrero 2025' },
   { value: '2025-03', label: 'Marzo 2025' },
@@ -34,7 +33,6 @@ export default function FilterBar({
   selectedMonth,
   onMonthChange,
 }: FilterBarProps) {
-  // Analistas activas desde la DB (sin hardcodeo).
   const { active } = useAnalysts();
   const analystOptions = [
     { value: 'all', label: 'Todos los analistas' },
@@ -42,42 +40,40 @@ export default function FilterBar({
   ];
 
   return (
-    <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl p-4 mb-6">
+    <div className="bg-surface border border-line p-4 mb-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Analyst Filter */}
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
-            <User className="w-4 h-4" />
+          <label className="flex items-center gap-1.5 text-xs font-medium text-fg-muted mb-1.5">
+            <span className="material-symbols-outlined text-[14px] leading-none" aria-hidden="true">
+              person
+            </span>
             Analista
           </label>
           <select
             value={selectedAnalyst}
             onChange={(e) => onAnalystChange(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-600 text-slate-200 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            className="w-full bg-canvas border border-fg-subtle text-fg text-sm rounded-sm px-3 py-2 focus:outline-none focus:border-ink transition-colors duration-base"
           >
             {analystOptions.map(opt => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
         </div>
 
-        {/* Month Filter */}
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
-            <Calendar className="w-4 h-4" />
+          <label className="flex items-center gap-1.5 text-xs font-medium text-fg-muted mb-1.5">
+            <span className="material-symbols-outlined text-[14px] leading-none" aria-hidden="true">
+              calendar_today
+            </span>
             Mes
           </label>
           <select
             value={selectedMonth}
             onChange={(e) => onMonthChange(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-600 text-slate-200 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+            className="w-full bg-canvas border border-fg-subtle text-fg text-sm rounded-sm px-3 py-2 focus:outline-none focus:border-ink transition-colors duration-base"
           >
-            {months.map(month => (
-              <option key={month.value} value={month.value}>
-                {month.label}
-              </option>
+            {months.map(m => (
+              <option key={m.value} value={m.value}>{m.label}</option>
             ))}
           </select>
         </div>

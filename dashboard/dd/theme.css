@@ -1,0 +1,139 @@
+/* ============================================================
+   Dental Data — Tailwind v4 theme
+   USAGE: @import "tailwindcss"; @import "./dd/theme.css";
+   Load fonts via <link> in <head>. Do NOT @import them here.
+   ============================================================ */
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+  --dd-canvas:        #EDE9E3;
+  --dd-surface:       #ffffff;
+  --dd-fg:            #0D0D0C;
+  --dd-fg-muted:      #656564;
+  --dd-fg-subtle:     #dcdcdc;
+  --dd-line:          rgba(10, 17, 20, 0.08);
+  --dd-line-strong:   #333333;
+  --dd-danger:        #B42318;
+}
+[data-theme="dark"] {
+  --dd-canvas:        #0D0D0C;
+  --dd-surface:       #181816;
+  --dd-fg:            #EDE9E3;
+  --dd-fg-muted:      #B0ADA5;
+  --dd-fg-subtle:     #736F67;
+  --dd-line:          rgba(255, 255, 255, 0.07);
+  --dd-line-strong:   rgba(255, 255, 255, 0.14);
+  --dd-danger:        #F97066;
+}
+
+@theme {
+  --font-display: 'Syne', system-ui, -apple-system, sans-serif;
+  --font-sans:    'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-ink:    #0D0D0C;
+  --color-paper:  #EDE9E3;
+  --color-accent: #E85420;
+
+  --color-danger:      #B42318;
+  --color-danger-tint: rgba(180, 35, 24, 0.12);
+  --color-success:      #0aa15e;
+  --color-success-tint: rgba(10, 161, 94, 0.12);
+
+  --color-boss-primary:   #4507cc;
+  --color-boss-primary-2: #5b1ee5;
+  --color-boss-deep:      #230a66;
+  --color-boss-light:     #9482d8;
+
+  --color-school-primary:    #E85420;
+  --color-school-primary-2:  #F06030;
+  --color-school-teal:       #1D7A6A;
+  --color-school-teal-dark:  #0F5045;
+  --color-school-teal-light: #2DA08C;
+
+  --color-grey-900: #0a1114;
+  --color-grey-700: #333333;
+  --color-grey-500: #656564;
+  --color-grey-300: #dcdcdc;
+  --color-grey-100: #f9f9f9;
+  --color-grey-050: #eaeeef;
+  --color-purple-900: #230a66;
+  --color-purple-700: #4507cc;
+  --color-purple-500: #9482d8;
+  --color-purple-300: #d0c8e8;
+  --color-teal-900: #032526;
+  --color-teal-700: #065056;
+  --color-teal-500: #478789;
+  --color-teal-300: #7db1b2;
+  --color-orange-900: #491b09;
+  --color-orange-700: #e6520f;
+  --color-orange-500: #cc8c79;
+  --color-orange-300: #e5cfc7;
+  --color-sand:       #ddb896;
+
+  --text-2xs:  11px;
+  --text-xs:   12px;
+  --text-sm:   14px;
+  --text-base: 16px;
+  --text-lg:   18px;
+  --text-xl:   22px;
+  --text-2xl:  28px;
+  --text-3xl:  36px;
+  --text-4xl:  48px;
+  --text-5xl:  64px;
+  --text-6xl:  88px;
+  --text-7xl:  120px;
+
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+  --radius-xl: 22px;
+
+  --shadow-xs: 0 1px 2px rgba(10, 17, 20, 0.04);
+  --shadow-sm: 0 2px 6px rgba(10, 17, 20, 0.06);
+  --shadow-md: 0 8px 24px rgba(10, 17, 20, 0.08);
+  --shadow-lg: 0 24px 60px rgba(10, 17, 20, 0.12);
+  --shadow-glow-purple: 0 30px 80px -20px rgba(69, 7, 204, 0.45);
+  --shadow-glow-orange: 0 30px 80px -20px rgba(230, 82, 15, 0.4);
+  --shadow-glow-teal:   0 30px 80px -20px rgba(6, 80, 86, 0.45);
+
+  --ease-standard:   cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@theme inline {
+  --color-canvas:    var(--dd-canvas);
+  --color-surface:   var(--dd-surface);
+  --color-fg:        var(--dd-fg);
+  --color-fg-muted:  var(--dd-fg-muted);
+  --color-fg-subtle: var(--dd-fg-subtle);
+  --color-line:      var(--dd-line);
+  --color-line-strong: var(--dd-line-strong);
+  --color-danger-fg: var(--dd-danger);
+}
+
+@utility duration-fast { transition-duration: 140ms; }
+@utility duration-base { transition-duration: 220ms; }
+@utility duration-slow { transition-duration: 420ms; }
+
+@utility bg-degradado-1     { background-image: linear-gradient(135deg, #0a1114 0%, #4507cc 55%, #e6520f 100%); }
+@utility bg-degradado-2     { background-image: linear-gradient(135deg, #e6520f 0%, #ddb896 100%); }
+@utility bg-gradient-purple { background-image: linear-gradient(160deg, #230a66 0%, #4507cc 70%, #9482d8 100%); }
+@utility bg-gradient-teal   { background-image: linear-gradient(160deg, #032526 0%, #065056 60%, #478789 100%); }
+@utility bg-gradient-orange { background-image: linear-gradient(160deg, #491b09 0%, #e6520f 70%, #ddb896 100%); }
+
+@layer base {
+  body {
+    background-color: var(--dd-canvas);
+    color: var(--dd-fg);
+    font-family: var(--font-sans);
+  }
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+  }
+  [data-theme="dark"] .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 200, 'GRAD' 0, 'opsz' 24;
+  }
+}

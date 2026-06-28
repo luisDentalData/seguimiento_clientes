@@ -2,9 +2,9 @@
 
 import { useState, useMemo } from 'react';
 import useSWR from 'swr';
-import { Users, Search, Calendar, Clock, AlertCircle, CheckCircle2, AlertTriangle, X, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown, UserPlus, Pencil, Power } from 'lucide-react';
 import Header from '@/components/Header';
 import ClientFormModal from '@/components/ClientFormModal';
+import { Alert, Modal, Button, Spinner } from '@/dd/components';
 import { api } from '@/lib/api';
 import { useAnalysts } from '@/lib/useAnalysts';
 import type { PortfolioClient, ClientStatus, Appointment } from '@/lib/types';
@@ -12,6 +12,37 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 const fetcher = (url: string) => api.get(url).then(res => res.data);
+
+const statusConfig: Record<ClientStatus, { label: string; icon: string; className: string }> = {
+  OK: {
+    label: 'OK',
+    icon: 'check_circle',
+    className: 'bg-success/10 text-success border border-success/20',
+  },
+  ATTENTION: {
+    label: 'Pendiente',
+    icon: 'warning',
+    className: 'bg-accent/10 text-accent border border-accent/20',
+  },
+  CRITICAL: {
+    label: 'Crítico',
+    icon: 'error',
+    className: 'bg-danger-tint text-danger-fg border border-danger-fg/20',
+  },
+};
+
+const daysSinceClass = (days: number | null) => {
+  if (days === null || days > 60) return 'text-danger-fg';
+  if (days > 30) return 'text-accent';
+  return 'text-success';
+};
+
+function formatDays(days: number | null) {
+  if (days === null) return 'Sin sesiones';
+  if (days === 0) return 'Hoy';
+  if (days === 1) return 'Ayer';
+  return `${days} días`;
+}
 
 export default function ClientesPage() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -23,8 +54,6 @@ export default function ClientesPage() {
   const [formClientId, setFormClientId] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
-  // Estado calculado en el BACKEND (una sola verdad). El analista se filtra
-  // server-side; el resto (búsqueda/estado/orden) es solo presentación.
   const portfolioKey = analystFilter === 'all'
     ? '/clients/portfolio'
     : `/clients/portfolio?analyst_email=${encodeURIComponent(analystFilter)}`;
@@ -48,9 +77,7 @@ export default function ClientesPage() {
   };
 
   const handleDeactivate = async (id: string, name: string) => {
-    if (!window.confirm(`¿Desactivar a "${name}"? No se borra nada; deja de aparecer en el portfolio activo.`)) {
-      return;
-    }
+    if (!window.confirm(`¿Desactivar a "${name}"? No se borra nada; deja de aparecer en el portfolio activo.`)) return;
     try {
       await api.post(`/clients/${id}/deactivate`);
       mutate();
@@ -60,7 +87,6 @@ export default function ClientesPage() {
     }
   };
 
-  // Historial de reuniones del cliente seleccionado (bajo demanda, no bulk).
   const { data: clientMeetings } = useSWR<Appointment[]>(
     selectedClientId ? `/appointments?matched_client_id=${selectedClientId}&limit=1000` : null,
     fetcher
@@ -68,8 +94,6 @@ export default function ClientesPage() {
 
   const clients = useMemo(() => portfolio ?? [], [portfolio]);
 
-  // Búsqueda + filtro de estado + orden por fecha (presentación; el orden por
-  // prioridad ya viene del backend salvo que el usuario ordene por fecha).
   const filteredClients = useMemo(() => {
     let result = clients.filter(client => {
       const matchesSearch = searchQuery === '' ||
@@ -90,28 +114,10 @@ export default function ClientesPage() {
   }, [clients, searchQuery, statusFilter, dateSort]);
 
   const statusCounts = useMemo(() => ({
-    OK: clients.filter(c => c.status === 'OK').length,
+    OK:        clients.filter(c => c.status === 'OK').length,
     ATTENTION: clients.filter(c => c.status === 'ATTENTION').length,
-    CRITICAL: clients.filter(c => c.status === 'CRITICAL').length,
+    CRITICAL:  clients.filter(c => c.status === 'CRITICAL').length,
   }), [clients]);
-
-  const getStatusConfig = (status: ClientStatus) => {
-    switch (status) {
-      case 'OK':
-        return { label: 'OK', color: 'text-green-300', bgColor: 'bg-green-500/20', borderColor: 'border-green-500/50', icon: CheckCircle2 };
-      case 'ATTENTION':
-        return { label: 'Pendiente', color: 'text-yellow-300', bgColor: 'bg-yellow-500/20', borderColor: 'border-yellow-500/50', icon: AlertTriangle };
-      case 'CRITICAL':
-        return { label: 'Crítico', color: 'text-red-300', bgColor: 'bg-red-500/20', borderColor: 'border-red-500/50', icon: AlertCircle };
-    }
-  };
-
-  const formatDaysSince = (days: number | null) => {
-    if (days === null) return 'Sin sesiones';
-    if (days === 0) return 'Hoy';
-    if (days === 1) return 'Ayer';
-    return `${days} días`;
-  };
 
   const selectedClient = selectedClientId
     ? clients.find(c => c.id === selectedClientId) ?? null
@@ -141,106 +147,103 @@ export default function ClientesPage() {
         subtitle="Seguimiento y priorización por estado actual de sesiones (calculado en el servidor, desde HOY)"
       />
 
-      {/* Estado de error: el usuario DEBE enterarse si el backend falla */}
       {error && (
-        <div className="mb-6 bg-red-500/10 border border-red-500/40 rounded-xl p-4 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-          <div className="text-sm">
-            <p className="font-medium text-red-300">No se pudo cargar el portfolio de clientes</p>
-            <p className="text-slate-400">El backend no respondió. Verificá que esté corriendo y reintentá.</p>
-          </div>
+        <div className="mb-6">
+          <Alert variant="error" title="No se pudo cargar el portfolio de clientes">
+            El backend no respondió. Verificá que esté corriendo y reintentá.
+          </Alert>
         </div>
       )}
 
       {/* Status Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div
-          className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl p-6 cursor-pointer hover:bg-slate-800/70 transition-all"
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <button
           onClick={() => setStatusFilter('ALL')}
+          className="bg-surface border border-line p-5 text-left transition-colors duration-base hover:border-line-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-boss-primary"
         >
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg">
-              <Users className="w-6 h-6 text-white" />
-            </div>
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-boss-primary text-[24px] leading-none" aria-hidden="true">group</span>
             <div>
-              <div className="text-2xl font-bold text-white">{clients.length}</div>
-              <div className="text-sm text-slate-400">Total Clientes</div>
+              <div className="font-display font-bold text-2xl text-fg">{clients.length}</div>
+              <div className="text-xs text-fg-muted">Total Clientes</div>
             </div>
           </div>
-        </div>
+        </button>
 
-        <div
-          className={`bg-slate-800/50 backdrop-blur-sm border ${statusFilter === 'OK' ? 'border-green-500' : 'border-slate-700'} rounded-xl p-6 cursor-pointer hover:bg-slate-800/70 transition-all`}
+        <button
           onClick={() => setStatusFilter(statusFilter === 'OK' ? 'ALL' : 'OK')}
+          className={`bg-surface border p-5 text-left transition-colors duration-base hover:border-success/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-boss-primary ${statusFilter === 'OK' ? 'border-success' : 'border-line'}`}
         >
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg">
-              <CheckCircle2 className="w-6 h-6 text-white" />
-            </div>
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-success text-[24px] leading-none" aria-hidden="true">check_circle</span>
             <div>
-              <div className="text-2xl font-bold text-white">{statusCounts.OK}</div>
-              <div className="text-sm text-slate-400">Clientes OK</div>
-              <div className="text-xs text-green-400">Sesión reciente (≤30d)</div>
+              <div className="font-display font-bold text-2xl text-fg">{statusCounts.OK}</div>
+              <div className="text-xs text-fg-muted">Clientes OK</div>
+              <div className="text-xs text-success">Sesión reciente (≤30d)</div>
             </div>
           </div>
-        </div>
+        </button>
 
-        <div
-          className={`bg-slate-800/50 backdrop-blur-sm border ${statusFilter === 'ATTENTION' ? 'border-yellow-500' : 'border-slate-700'} rounded-xl p-6 cursor-pointer hover:bg-slate-800/70 transition-all`}
+        <button
           onClick={() => setStatusFilter(statusFilter === 'ATTENTION' ? 'ALL' : 'ATTENTION')}
+          className={`bg-surface border p-5 text-left transition-colors duration-base hover:border-accent/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-boss-primary ${statusFilter === 'ATTENTION' ? 'border-accent' : 'border-line'}`}
         >
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-gradient-to-br from-yellow-500 to-orange-500 rounded-lg">
-              <AlertTriangle className="w-6 h-6 text-white" />
-            </div>
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-accent text-[24px] leading-none" aria-hidden="true">warning</span>
             <div>
-              <div className="text-2xl font-bold text-white">{statusCounts.ATTENTION}</div>
-              <div className="text-sm text-slate-400">Pendientes</div>
-              <div className="text-xs text-yellow-400">31-60 días sin sesión</div>
+              <div className="font-display font-bold text-2xl text-fg">{statusCounts.ATTENTION}</div>
+              <div className="text-xs text-fg-muted">Pendientes</div>
+              <div className="text-xs text-accent">31-60 días sin sesión</div>
             </div>
           </div>
-        </div>
+        </button>
 
-        <div
-          className={`bg-slate-800/50 backdrop-blur-sm border ${statusFilter === 'CRITICAL' ? 'border-red-500 animate-pulse' : 'border-slate-700'} rounded-xl p-6 cursor-pointer hover:bg-slate-800/70 transition-all`}
+        <button
           onClick={() => setStatusFilter(statusFilter === 'CRITICAL' ? 'ALL' : 'CRITICAL')}
+          className={`bg-surface border p-5 text-left transition-colors duration-base hover:border-danger-fg/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-boss-primary ${statusFilter === 'CRITICAL' ? 'border-danger-fg' : 'border-line'}`}
         >
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-gradient-to-br from-red-500 to-pink-500 rounded-lg">
-              <AlertCircle className="w-6 h-6 text-white" />
-            </div>
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-danger-fg text-[24px] leading-none" aria-hidden="true">error</span>
             <div>
-              <div className="text-2xl font-bold text-white">{statusCounts.CRITICAL}</div>
-              <div className="text-sm text-slate-400">Críticos</div>
-              <div className="text-xs text-red-400">&gt;60 días sin sesión</div>
+              <div className="font-display font-bold text-2xl text-fg">{statusCounts.CRITICAL}</div>
+              <div className="text-xs text-fg-muted">Críticos</div>
+              <div className="text-xs text-danger-fg">&gt;60 días sin sesión</div>
             </div>
           </div>
-        </div>
+        </button>
       </div>
 
-      {/* Aviso de éxito (alta/edición/desactivación) */}
+      {/* Success notification */}
       {savedMsg && (
-        <div className="mb-6 bg-green-500/10 border border-green-500/40 rounded-xl p-4 flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-green-300">{savedMsg}</p>
-          </div>
-          <button onClick={() => setSavedMsg(null)} className="text-slate-400 hover:text-white">
-            <X className="w-4 h-4" />
-          </button>
+        <div className="mb-4">
+          <Alert variant="success">
+            <span className="flex items-center justify-between gap-3">
+              {savedMsg}
+              <button
+                type="button"
+                onClick={() => setSavedMsg(null)}
+                className="text-success/70 hover:text-success shrink-0"
+                aria-label="Cerrar"
+              >
+                <span className="material-symbols-outlined text-[16px] leading-none" aria-hidden="true">close</span>
+              </button>
+            </span>
+          </Alert>
         </div>
       )}
 
       {/* Search Bar + Analyst Filter + Nuevo cliente */}
-      <div className="flex gap-3 mb-6">
+      <div className="flex gap-3 mb-4">
         <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted text-[18px] leading-none pointer-events-none" aria-hidden="true">
+            search
+          </span>
           <input
             type="text"
             placeholder="Buscar por nombre de cliente o contacto..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+            className="w-full pl-10 pr-4 py-2.5 bg-surface border border-fg-subtle text-fg text-sm rounded-sm placeholder-fg-muted focus:outline-none focus:border-ink transition-colors duration-base"
           />
         </div>
 
@@ -248,165 +251,153 @@ export default function ClientesPage() {
           <select
             value={analystFilter}
             onChange={(e) => setAnalystFilter(e.target.value)}
-            className="appearance-none pl-4 pr-10 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-blue-500 transition-colors cursor-pointer min-w-[180px]"
+            className="appearance-none pl-3 pr-9 py-2.5 bg-surface border border-fg-subtle text-fg text-sm rounded-sm focus:outline-none focus:border-ink transition-colors duration-base cursor-pointer min-w-[180px]"
           >
             {analysts.map(a => (
-              <option key={a.value} value={a.value} className="bg-slate-800">
-                {a.label}
-              </option>
+              <option key={a.value} value={a.value}>{a.label}</option>
             ))}
           </select>
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+          <span className="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-muted text-[18px] leading-none pointer-events-none" aria-hidden="true">
+            expand_more
+          </span>
         </div>
 
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl transition-colors whitespace-nowrap"
-        >
-          <UserPlus className="w-5 h-5" /> Nuevo cliente
-        </button>
+        <Button variant="primary" onClick={openCreate}>
+          <span className="material-symbols-outlined text-[16px] leading-none" aria-hidden="true">person_add</span>
+          Nuevo cliente
+        </Button>
       </div>
 
       {/* Clients Table */}
-      <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-b border-slate-700 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-white">
-              Listado de Clientes ({filteredClients.length})
-            </h2>
-            {statusFilter !== 'ALL' && (
-              <button
-                onClick={() => setStatusFilter('ALL')}
-                className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
-              >
-                Ver todos
-              </button>
-            )}
-          </div>
+      <div className="bg-surface border border-line overflow-hidden mb-6">
+        <div className="border-b border-line px-5 py-3.5 flex items-center justify-between">
+          <span className="text-sm font-medium text-fg">
+            Listado de Clientes ({filteredClients.length})
+          </span>
+          {statusFilter !== 'ALL' && (
+            <button
+              onClick={() => setStatusFilter('ALL')}
+              className="text-xs text-boss-primary hover:text-boss-primary-2 transition-colors duration-base"
+            >
+              Ver todos
+            </button>
+          )}
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-900/50 border-b border-slate-700">
-              <tr>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Estado</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Cliente</th>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line bg-canvas/50">
+                <th className="px-5 py-3 text-left text-xs font-semibold text-fg-muted uppercase tracking-wide">Estado</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-fg-muted uppercase tracking-wide">Cliente</th>
                 <th
-                  className="px-6 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider cursor-pointer hover:text-white select-none group"
+                  className="px-5 py-3 text-left text-xs font-semibold text-fg-muted uppercase tracking-wide cursor-pointer hover:text-fg select-none"
                   onClick={cycleDateSort}
                 >
-                  <div className="flex items-center gap-1">
+                  <span className="flex items-center gap-1">
                     Última Sesión
-                    <span className="text-slate-500 group-hover:text-slate-300 transition-colors">
-                      {dateSort === null && <ArrowUpDown className="w-3 h-3" />}
-                      {dateSort === 'desc' && <ArrowDown className="w-3 h-3 text-blue-400" />}
-                      {dateSort === 'asc' && <ArrowUp className="w-3 h-3 text-blue-400" />}
+                    <span className="material-symbols-outlined text-[14px] leading-none" aria-hidden="true">
+                      {dateSort === null ? 'unfold_more' : dateSort === 'desc' ? 'arrow_downward' : 'arrow_upward'}
                     </span>
-                  </div>
+                  </span>
                 </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Días sin Sesión</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Sesiones</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Analista</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Acciones</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-fg-muted uppercase tracking-wide">Días sin Sesión</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-fg-muted uppercase tracking-wide">Sesiones</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-fg-muted uppercase tracking-wide">Analista</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-fg-muted uppercase tracking-wide">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700">
+            <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
-                    Cargando portfolio...
+                  <td colSpan={7} className="px-5 py-10 text-center">
+                    <div className="flex items-center justify-center gap-2 text-fg-muted">
+                      <Spinner className="h-4 w-4" />
+                      <span>Cargando portfolio...</span>
+                    </div>
                   </td>
                 </tr>
               ) : filteredClients.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={7} className="px-5 py-10 text-center text-fg-muted">
                     {searchQuery ? 'No se encontraron clientes con ese criterio' : 'No hay clientes disponibles'}
                   </td>
                 </tr>
               ) : (
                 filteredClients.map((client) => {
-                  const statusConfig = getStatusConfig(client.status);
-                  const StatusIcon = statusConfig.icon;
+                  const cfg = statusConfig[client.status];
                   const lastSessionDate = client.last_session ? new Date(client.last_session) : null;
 
                   return (
-                    <tr key={client.id} className="hover:bg-slate-700/30 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full ${statusConfig.bgColor} border ${statusConfig.borderColor}`}>
-                          <StatusIcon className={`w-4 h-4 ${statusConfig.color}`} />
-                          <span className={`text-sm font-medium ${statusConfig.color}`}>{statusConfig.label}</span>
-                        </div>
+                    <tr key={client.id} className="border-b border-line last:border-b-0 hover:bg-canvas/30 transition-colors duration-fast">
+                      <td className="px-5 py-3.5 whitespace-nowrap">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium ${cfg.className}`}>
+                          <span className="material-symbols-outlined text-[13px] leading-none" aria-hidden="true">{cfg.icon}</span>
+                          {cfg.label}
+                        </span>
                       </td>
 
-                      <td className="px-6 py-4">
-                        <div>
-                          <div className="font-medium text-white">{client.name}</div>
-                          {client.nombre_contacto && (
-                            <div className="text-sm text-slate-400">{client.nombre_contacto}</div>
+                      <td className="px-5 py-3.5">
+                        <div className="font-medium text-fg">{client.name}</div>
+                        {client.nombre_contacto && (
+                          <div className="text-xs text-fg-muted">{client.nombre_contacto}</div>
+                        )}
+                        <div className="flex gap-1.5 mt-1">
+                          {client.programa && (
+                            <span className="px-1.5 py-0.5 bg-boss-primary/10 text-boss-light text-xs">{client.programa}</span>
                           )}
-                          <div className="flex gap-2 mt-1">
-                            {client.programa && (
-                              <span className="px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded text-xs">{client.programa}</span>
-                            )}
-                            {client.provincia && (
-                              <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded text-xs">{client.provincia}</span>
-                            )}
-                          </div>
+                          {client.provincia && (
+                            <span className="px-1.5 py-0.5 bg-canvas text-fg-muted text-xs border border-line">{client.provincia}</span>
+                          )}
                         </div>
                       </td>
 
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {lastSessionDate ? (
-                          <div className="text-sm text-slate-300">{format(lastSessionDate, "d MMM yyyy", { locale: es })}</div>
-                        ) : (
-                          <div className="text-sm text-slate-500">Sin sesiones</div>
-                        )}
+                      <td className="px-5 py-3.5 whitespace-nowrap text-sm text-fg-muted">
+                        {lastSessionDate
+                          ? format(lastSessionDate, "d MMM yyyy", { locale: es })
+                          : <span className="text-fg-subtle">Sin sesiones</span>
+                        }
                       </td>
 
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className={`text-sm font-medium ${
-                          client.days_since === null || client.days_since > 60 ? 'text-red-400' :
-                          client.days_since > 30 ? 'text-yellow-400' :
-                          'text-green-400'
-                        }`}>
-                          {formatDaysSince(client.days_since)}
-                        </div>
+                      <td className="px-5 py-3.5 whitespace-nowrap">
+                        <span className={`text-sm font-medium ${daysSinceClass(client.days_since)}`}>
+                          {formatDays(client.days_since)}
+                        </span>
                       </td>
 
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-slate-300">{client.valid_sessions}</div>
+                      <td className="px-5 py-3.5 whitespace-nowrap text-sm text-fg">
+                        {client.valid_sessions}
                       </td>
 
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {client.last_analyst ? (
-                          <div className="text-sm text-slate-300">{client.last_analyst.split('@')[0]}</div>
-                        ) : (
-                          <div className="text-sm text-slate-500">-</div>
-                        )}
+                      <td className="px-5 py-3.5 whitespace-nowrap text-sm text-fg-muted">
+                        {client.last_analyst ? client.last_analyst.split('@')[0] : '—'}
                       </td>
 
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex gap-2">
+                      <td className="px-5 py-3.5 whitespace-nowrap">
+                        <div className="flex gap-1.5">
                           <button
+                            type="button"
                             onClick={() => setSelectedClientId(client.id)}
-                            className="p-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors"
                             title="Ver historial"
+                            className="p-1.5 text-fg-muted hover:text-fg hover:bg-canvas transition-colors duration-fast"
                           >
-                            <Clock className="w-4 h-4" />
+                            <span className="material-symbols-outlined text-[16px] leading-none" aria-hidden="true">history</span>
                           </button>
                           <button
+                            type="button"
                             onClick={() => openEdit(client.id)}
-                            className="p-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-lg transition-colors"
                             title="Editar cliente"
+                            className="p-1.5 text-boss-primary hover:text-boss-primary-2 hover:bg-boss-primary/10 transition-colors duration-fast"
                           >
-                            <Pencil className="w-4 h-4" />
+                            <span className="material-symbols-outlined text-[16px] leading-none" aria-hidden="true">edit</span>
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleDeactivate(client.id, client.name)}
-                            className="p-2 bg-slate-700 hover:bg-red-500/30 text-slate-300 hover:text-red-300 rounded-lg transition-colors"
                             title="Desactivar cliente"
+                            className="p-1.5 text-fg-muted hover:text-danger-fg hover:bg-danger-tint transition-colors duration-fast"
                           >
-                            <Power className="w-4 h-4" />
+                            <span className="material-symbols-outlined text-[16px] leading-none" aria-hidden="true">power_settings_new</span>
                           </button>
                         </div>
                       </td>
@@ -420,112 +411,76 @@ export default function ClientesPage() {
       </div>
 
       {/* Info Footer */}
-      <div className="mt-6 bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-slate-300">
-            <p className="font-medium text-blue-300 mb-1">Criterios de clasificación (desde HOY):</p>
-            <ul className="space-y-1 text-slate-400">
-              <li>• <strong className="text-green-400">OK</strong>: Cliente con sesión en los últimos 30 días (desde hoy)</li>
-              <li>• <strong className="text-yellow-400">Pendiente</strong>: Cliente sin sesión entre 31-60 días (desde hoy)</li>
-              <li>• <strong className="text-red-400">Crítico</strong>: Cliente sin sesión hace más de 60 días o sin sesiones</li>
-              <li className="mt-2 pt-2 border-t border-blue-500/20">
-                ℹ️ El estado se calcula <strong>en el servidor, siempre desde la fecha actual</strong> — una sola verdad para todos los analistas.
-              </li>
-              <li className="mt-1">
-                Solo se contabilizan reuniones de cliente: <code className="px-1 py-0.5 bg-slate-800 rounded text-xs">is_client_meeting=true</code> (incluye CONFIRMED y PROBABLE, excluye INTERNAL y NO_MATCH)
-              </li>
-            </ul>
-          </div>
-        </div>
+      <div className="mb-6">
+        <Alert variant="info" title="Criterios de clasificación (desde HOY):">
+          <ul className="space-y-1 text-xs text-fg-muted mt-1">
+            <li><strong className="text-success">OK</strong>: sesión en los últimos 30 días</li>
+            <li><strong className="text-accent">Pendiente</strong>: sin sesión entre 31-60 días</li>
+            <li><strong className="text-danger-fg">Crítico</strong>: sin sesión &gt;60 días o sin sesiones</li>
+            <li className="mt-2 pt-2 border-t border-line">
+              Solo se contabilizan <code className="px-1 bg-canvas text-xs">is_client_meeting=true</code> (CONFIRMED y PROBABLE).
+            </li>
+          </ul>
+        </Alert>
       </div>
 
       {/* Meeting History Modal */}
-      {selectedClientId && selectedClient && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={() => setSelectedClientId(null)}
-        >
-          <div
-            className="bg-slate-800 border border-slate-700 rounded-xl max-w-3xl w-full max-h-[80vh] overflow-hidden shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-b border-slate-700 px-6 py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-semibold text-white">Historial de Reuniones</h2>
-                  <p className="text-sm text-slate-400 mt-1">{selectedClient.name}</p>
-                </div>
-                <button
-                  onClick={() => setSelectedClientId(null)}
-                  className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5 text-slate-400" />
-                </button>
-              </div>
-            </div>
+      <Modal
+        open={selectedClientId !== null}
+        onClose={() => setSelectedClientId(null)}
+        title="Historial de Reuniones"
+        className="max-w-3xl"
+      >
+        {selectedClient && (
+          <p className="text-sm text-fg-muted -mt-2">{selectedClient.name}</p>
+        )}
 
-            <div className="overflow-y-auto max-h-[calc(80vh-80px)] p-6">
-              {selectedClientMeetings.length === 0 ? (
-                <div className="text-center py-12">
-                  <Clock className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                  <p className="text-slate-400">No hay reuniones registradas para este cliente</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {selectedClientMeetings.map((meeting) => (
-                    <div
-                      key={meeting.id}
-                      className="bg-slate-900/50 border border-slate-700 rounded-lg p-4 hover:bg-slate-900/70 transition-colors"
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="font-medium text-white mb-2">{meeting.summary || 'Sin título'}</div>
-                          <div className="flex items-center gap-2 text-sm text-slate-400 mb-2">
-                            <Calendar className="w-4 h-4" />
-                            <span>{format(new Date(meeting.start_time), "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}</span>
-                            <span className="text-slate-500">•</span>
-                            <span>{format(new Date(meeting.start_time), 'HH:mm', { locale: es })}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-slate-500">Analista:</span>
-                            <span className="px-2 py-1 bg-blue-500/20 text-blue-300 rounded text-xs">
-                              {nameByEmail(meeting.analyst_email)}
-                            </span>
-                          </div>
-                        </div>
-                        <div>
-                          <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${
-                            meeting.match_status === 'CONFIRMED'
-                              ? 'bg-green-500/20 text-green-300'
-                              : 'bg-yellow-500/20 text-yellow-300'
-                          }`}>
-                            {meeting.match_status}
-                          </span>
-                        </div>
-                      </div>
+        <div className="overflow-y-auto max-h-[50vh] space-y-2.5">
+          {selectedClientMeetings.length === 0 ? (
+            <div className="text-center py-10 text-fg-muted">
+              <span className="material-symbols-outlined text-[48px] text-fg-subtle leading-none block mb-3" aria-hidden="true">history</span>
+              No hay reuniones registradas para este cliente
+            </div>
+          ) : (
+            selectedClientMeetings.map((meeting) => (
+              <div
+                key={meeting.id}
+                className="bg-canvas border border-line p-4"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-fg mb-1 truncate">{meeting.summary || 'Sin título'}</div>
+                    <div className="flex items-center gap-2 text-xs text-fg-muted">
+                      <span className="material-symbols-outlined text-[14px] leading-none" aria-hidden="true">calendar_today</span>
+                      <span>{format(new Date(meeting.start_time), "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}</span>
+                      <span className="text-fg-subtle">•</span>
+                      <span>{format(new Date(meeting.start_time), 'HH:mm')}</span>
                     </div>
-                  ))}
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-xs text-fg-subtle">Analista:</span>
+                      <span className="px-1.5 py-0.5 bg-boss-primary/10 text-boss-light text-xs">{nameByEmail(meeting.analyst_email)}</span>
+                    </div>
+                  </div>
+                  <span className={`text-xs font-medium px-2 py-0.5 shrink-0 ${
+                    meeting.match_status === 'CONFIRMED'
+                      ? 'bg-success/10 text-success'
+                      : 'bg-accent/10 text-accent'
+                  }`}>
+                    {meeting.match_status}
+                  </span>
                 </div>
-              )}
-            </div>
-
-            <div className="border-t border-slate-700 px-6 py-4 bg-slate-900/50">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-400">
-                  Total de reuniones: <strong className="text-white">{selectedClientMeetings.length}</strong>
-                </span>
-                <button
-                  onClick={() => setSelectedClientId(null)}
-                  className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
-                >
-                  Cerrar
-                </button>
               </div>
-            </div>
-          </div>
+            ))
+          )}
         </div>
-      )}
+
+        <div className="flex items-center justify-between border-t border-line pt-4">
+          <span className="text-xs text-fg-muted">
+            Total: <strong className="text-fg">{selectedClientMeetings.length}</strong> reuniones
+          </span>
+          <Button variant="ghost" onClick={() => setSelectedClientId(null)}>Cerrar</Button>
+        </div>
+      </Modal>
 
       {/* Modal de alta/edición de cliente */}
       {formOpen && (

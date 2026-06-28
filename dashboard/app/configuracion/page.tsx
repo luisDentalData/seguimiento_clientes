@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { UserPlus, Power, Pencil, CheckCircle2, AlertCircle } from 'lucide-react';
 import Header from '@/components/Header';
 import GroupsManager from '@/components/GroupsManager';
+import { Alert, Button, Spinner } from '@/dd/components';
 import { api } from '@/lib/api';
 import { useAnalysts } from '@/lib/useAnalysts';
+
+const inputCls = 'px-3 py-2 bg-canvas border border-fg-subtle text-fg text-sm rounded-sm placeholder-fg-subtle focus:outline-none focus:border-ink transition-colors duration-base';
 
 export default function ConfiguracionPage() {
   const { all, mutate, isLoading } = useAnalysts();
@@ -62,105 +64,108 @@ export default function ConfiguracionPage() {
     }
   };
 
-  const inputClass =
-    'px-3 py-2 bg-slate-900/60 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors';
-
   return (
     <div>
       <Header title="Configuración" subtitle="Gestión de analistas del equipo" />
 
       {error && (
-        <div className="mb-6 bg-red-500/10 border border-red-500/40 rounded-xl p-4 flex items-center gap-3 text-sm text-red-300">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" /> {error}
+        <div className="mb-5">
+          <Alert variant="error">{error}</Alert>
         </div>
       )}
 
       {/* Alta de analista */}
-      <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl p-6 mb-6">
-        <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-          <UserPlus className="w-5 h-5" /> Nueva analista
+      <div className="bg-surface border border-line p-5 mb-5">
+        <h2 className="text-base font-medium text-fg mb-4 flex items-center gap-2">
+          <span className="material-symbols-outlined text-boss-primary text-[18px] leading-none" aria-hidden="true">person_add</span>
+          Nueva analista
         </h2>
         <div className="flex flex-col md:flex-row gap-3">
           <input
-            className={`${inputClass} flex-1`}
+            className={`${inputCls} flex-1`}
             placeholder="email@dentaldata.es"
             value={email}
             onChange={e => setEmail(e.target.value)}
           />
           <input
-            className={`${inputClass} flex-1`}
+            className={`${inputCls} flex-1`}
             placeholder="Nombre y apellido"
             value={name}
             onChange={e => setName(e.target.value)}
           />
-          <button
-            onClick={handleCreate}
-            disabled={saving}
-            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-lg transition-colors whitespace-nowrap"
-          >
+          <Button variant="primary" loading={saving} disabled={saving} onClick={handleCreate}>
             {saving ? 'Creando...' : 'Crear analista'}
-          </button>
+          </Button>
         </div>
-        <p className="text-xs text-slate-500 mt-3">
+        <p className="text-xs text-fg-subtle mt-3">
           Debe ser @dentaldata.es para que el ETL pueda leer su calendario de Google. El próximo Sync bajará sus reuniones.
         </p>
       </div>
 
       {/* Lista de analistas */}
-      <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-b border-slate-700 px-6 py-4">
-          <h2 className="text-lg font-semibold text-white">Analistas ({all.length})</h2>
+      <div className="bg-surface border border-line overflow-hidden">
+        <div className="border-b border-line px-5 py-3.5">
+          <span className="text-sm font-medium text-fg">Analistas ({all.length})</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-900/50 border-b border-slate-700">
-              <tr>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Nombre</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Email</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Estado</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Acciones</th>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line bg-canvas/50">
+                <th className="px-5 py-3 text-left text-xs font-semibold text-fg-muted uppercase tracking-wide">Nombre</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-fg-muted uppercase tracking-wide">Email</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-fg-muted uppercase tracking-wide">Estado</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-fg-muted uppercase tracking-wide">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700">
+            <tbody>
               {isLoading ? (
-                <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-400">Cargando...</td></tr>
+                <tr>
+                  <td colSpan={4} className="px-5 py-10 text-center">
+                    <Spinner className="mx-auto h-5 w-5" />
+                  </td>
+                </tr>
               ) : all.length === 0 ? (
-                <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-400">No hay analistas. Agregá una arriba.</td></tr>
+                <tr>
+                  <td colSpan={4} className="px-5 py-10 text-center text-fg-muted">No hay analistas. Agregá una arriba.</td>
+                </tr>
               ) : (
                 all.map(a => (
-                  <tr key={a.email} className="hover:bg-slate-700/30 transition-colors">
-                    <td className="px-6 py-4 font-medium text-white">{a.name}</td>
-                    <td className="px-6 py-4 text-slate-400">{a.email}</td>
-                    <td className="px-6 py-4">
+                  <tr key={a.email} className="border-b border-line last:border-b-0 hover:bg-canvas/30 transition-colors duration-fast">
+                    <td className="px-5 py-3.5 font-medium text-fg">{a.name}</td>
+                    <td className="px-5 py-3.5 text-fg-muted">{a.email}</td>
+                    <td className="px-5 py-3.5">
                       {a.is_active ? (
-                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-green-500/20 border border-green-500/50 text-green-300 text-sm">
-                          <CheckCircle2 className="w-4 h-4" /> Activa
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-medium bg-success/10 text-success border border-success/20">
+                          <span className="material-symbols-outlined text-[13px] leading-none" aria-hidden="true">check_circle</span>
+                          Activa
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-600/30 border border-slate-600 text-slate-400 text-sm">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-medium bg-canvas text-fg-subtle border border-line">
                           Inactiva
                         </span>
                       )}
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex gap-2">
+                    <td className="px-5 py-3.5">
+                      <div className="flex gap-1.5">
                         <button
+                          type="button"
                           onClick={() => renameAnalyst(a.email, a.name)}
-                          className="p-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-lg transition-colors"
                           title="Renombrar"
+                          className="p-1.5 text-boss-primary hover:bg-boss-primary/10 transition-colors duration-fast"
                         >
-                          <Pencil className="w-4 h-4" />
+                          <span className="material-symbols-outlined text-[16px] leading-none" aria-hidden="true">edit</span>
                         </button>
                         <button
+                          type="button"
                           onClick={() => toggleActive(a.email, a.is_active)}
-                          className={`p-2 rounded-lg transition-colors ${
-                            a.is_active
-                              ? 'bg-slate-700 hover:bg-red-500/30 text-slate-300 hover:text-red-300'
-                              : 'bg-green-500/20 hover:bg-green-500/30 text-green-300'
-                          }`}
                           title={a.is_active ? 'Desactivar' : 'Reactivar'}
+                          className={`p-1.5 transition-colors duration-fast ${
+                            a.is_active
+                              ? 'text-fg-muted hover:text-danger-fg hover:bg-danger-tint'
+                              : 'text-success hover:bg-success/10'
+                          }`}
                         >
-                          <Power className="w-4 h-4" />
+                          <span className="material-symbols-outlined text-[16px] leading-none" aria-hidden="true">power_settings_new</span>
                         </button>
                       </div>
                     </td>
@@ -172,7 +177,6 @@ export default function ConfiguracionPage() {
         </div>
       </div>
 
-      {/* Grupos de sedes que comparten reuniones */}
       <GroupsManager />
     </div>
   );

@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 import { api } from '@/lib/api';
+import { Button } from '@/dd/components';
 
 export default function SyncButton() {
   const [isLoading, setIsLoading] = useState(false);
@@ -18,23 +18,13 @@ export default function SyncButton() {
       const response = await api.post('/etl/run');
       setStatus('success');
       setMessage(response.data.message || 'Datos actualizados correctamente');
-
-      // Limpiar mensaje después de 5 segundos
-      setTimeout(() => {
-        setStatus('idle');
-        setMessage('');
-      }, 5000);
+      setTimeout(() => { setStatus('idle'); setMessage(''); }, 5000);
     } catch (error: unknown) {
       const detailMsg =
         (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setStatus('error');
       setMessage(detailMsg || 'Error al actualizar datos');
-
-      // Limpiar mensaje después de 5 segundos
-      setTimeout(() => {
-        setStatus('idle');
-        setMessage('');
-      }, 5000);
+      setTimeout(() => { setStatus('idle'); setMessage(''); }, 5000);
     } finally {
       setIsLoading(false);
     }
@@ -42,46 +32,34 @@ export default function SyncButton() {
 
   return (
     <div className="fixed top-4 right-4 z-50 flex flex-col items-end gap-2">
-      <button
-        onClick={handleSync}
+      <Button
+        variant="primary"
+        loading={isLoading}
         disabled={isLoading}
-        className={`
-          flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all
-          ${isLoading
-            ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-            : 'bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white shadow-lg hover:shadow-xl'
-          }
-        `}
+        onClick={handleSync}
         title="Actualizar datos desde Google Calendar"
       >
-        <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-        <span>{isLoading ? 'Actualizando...' : 'Sincronizar'}</span>
-      </button>
+        {!isLoading && (
+          <span className="material-symbols-outlined text-[16px] leading-none" aria-hidden="true">
+            sync
+          </span>
+        )}
+        {isLoading ? 'Actualizando...' : 'Sincronizar'}
+      </Button>
 
-      {/* Status Message */}
       {message && (
         <div
-          className={`
-            flex items-center gap-2 px-4 py-2 rounded-lg text-sm shadow-lg animate-in slide-in-from-top
-            ${status === 'success'
-              ? 'bg-green-500/20 border border-green-500/30 text-green-300'
-              : 'bg-red-500/20 border border-red-500/30 text-red-300'
-            }
-          `}
+          className={[
+            'flex items-center gap-2 px-3 py-2 text-sm border',
+            status === 'success'
+              ? 'bg-success/10 border-success/30 text-success'
+              : 'bg-danger-tint border-danger-fg/30 text-danger-fg',
+          ].join(' ')}
         >
-          {status === 'success' ? (
-            <CheckCircle2 className="w-4 h-4" />
-          ) : (
-            <AlertCircle className="w-4 h-4" />
-          )}
+          <span className="material-symbols-outlined text-[16px] leading-none" aria-hidden="true">
+            {status === 'success' ? 'check_circle' : 'error'}
+          </span>
           <span>{message}</span>
-        </div>
-      )}
-
-      {/* Info tooltip - Solo visible cuando no está cargando */}
-      {!isLoading && status === 'idle' && (
-        <div className="text-xs text-slate-500 bg-slate-800/80 px-3 py-1 rounded-md">
-          Función temporal de desarrollo
         </div>
       )}
     </div>

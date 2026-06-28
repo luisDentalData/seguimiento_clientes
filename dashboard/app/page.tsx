@@ -2,22 +2,35 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Calendar, Users, CheckCircle, XCircle, TrendingUp, BarChart3 } from 'lucide-react';
 import Header from '@/components/Header';
 import FilterBar from '@/components/FilterBar';
 import MetricCard from '@/components/MetricCard';
+import { Spinner, Alert } from '@/dd/components';
 import { api } from '@/lib/api';
 import { useAnalysts } from '@/lib/useAnalysts';
 import type { SummaryStats } from '@/lib/types';
 
 const fetcher = (url: string) => api.get(url).then(res => res.data);
 
+const statusBarColors: Record<string, string> = {
+  CONFIRMED: 'bg-success',
+  PROBABLE:  'bg-boss-primary',
+  NO_MATCH:  'bg-accent',
+  INTERNAL:  'bg-fg-subtle',
+};
+
+const statusLabels: Record<string, string> = {
+  CONFIRMED: 'Confirmadas',
+  PROBABLE:  'Probables',
+  NO_MATCH:  'Sin Match',
+  INTERNAL:  'Internas',
+};
+
 export default function HomePage() {
   const [selectedAnalyst, setSelectedAnalyst] = useState('all');
   const [selectedMonth, setSelectedMonth] = useState('all');
   const { nameByEmail } = useAnalysts();
 
-  // Fetch data
   const { data: stats, error, isLoading } = useSWR<SummaryStats>(
     '/stats/summary',
     fetcher,
@@ -27,15 +40,15 @@ export default function HomePage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <Spinner className="h-8 w-8" label="Cargando datos..." />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-red-400">Error cargando datos: {error.message}</div>
+      <div className="flex items-center justify-center min-h-screen p-8">
+        <Alert variant="error">Error cargando datos: {error.message}</Alert>
       </div>
     );
   }
@@ -55,67 +68,68 @@ export default function HomePage() {
       />
 
       {/* Métricas Principales */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <MetricCard
           title="Total Clientes"
           value={stats?.total_clients || 0}
           subtitle="En base de datos"
-          icon={Users}
-          gradient="blue"
+          icon="group"
+          color="blue"
         />
         <MetricCard
           title="Clientes con Reuniones"
           value={stats?.clients_with_meetings || 0}
           subtitle={`${stats?.total_clients ? ((stats.clients_with_meetings / stats.total_clients) * 100).toFixed(1) : 0}% del total`}
-          icon={CheckCircle}
-          gradient="green"
+          icon="check_circle"
+          color="green"
         />
         <MetricCard
           title="Clientes sin Reuniones"
           value={stats?.clients_without_meetings || 0}
           subtitle="Requieren atención"
-          icon={XCircle}
-          gradient="orange"
+          icon="cancel"
+          color="orange"
         />
         <MetricCard
           title="Total Eventos"
           value={stats?.analyst_stats?.reduce((sum, a) => sum + a.total_appointments, 0) || 0}
           subtitle="Período Sep-Dic 2025"
-          icon={Calendar}
-          gradient="purple"
+          icon="calendar_today"
+          color="purple"
         />
       </div>
 
       {/* Rendimiento por Analista */}
-      <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl p-6 mb-8">
-        <div className="flex items-center gap-2 mb-6">
-          <TrendingUp className="w-5 h-5 text-blue-400" />
-          <h2 className="text-xl font-semibold text-white">Rendimiento por Analista</h2>
+      <div className="bg-surface border border-line p-6 mb-6">
+        <div className="flex items-center gap-2 mb-5">
+          <span className="material-symbols-outlined text-boss-primary text-[20px] leading-none" aria-hidden="true">
+            trending_up
+          </span>
+          <h2 className="font-display text-xl text-fg">Rendimiento por Analista</h2>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-5">
           {stats?.analyst_stats?.map((analyst) => {
             const percentage = analyst.total_appointments > 0
               ? (analyst.confirmed_meetings / analyst.total_appointments) * 100
               : 0;
-
             const analystName = nameByEmail(analyst.analyst);
 
             return (
-              <div key={analyst.analyst} className="space-y-2">
+              <div key={analyst.analyst} className="space-y-1.5">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-300 font-medium">{analystName}</span>
-                  <span className="text-slate-400">
+                  <span className="text-fg font-medium">{analystName}</span>
+                  <span className="text-fg-muted">
                     {analyst.confirmed_meetings} / {analyst.total_appointments} reuniones
                   </span>
                 </div>
-                <div className="relative h-2 bg-slate-700 rounded-full overflow-hidden">
+                <div className="relative h-1.5 bg-canvas rounded-none overflow-hidden">
                   <div
-                    className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-500"
+                    className="absolute inset-y-0 left-0 bg-boss-primary transition-all duration-slow"
                     style={{ width: `${percentage}%` }}
                   />
                 </div>
-                <div className="text-xs text-slate-500 text-right">{percentage.toFixed(1)}% efectividad</div>
+                <div className="text-xs text-fg-subtle text-right">{percentage.toFixed(1)}% efectividad</div>
               </div>
             );
           })}
@@ -123,44 +137,32 @@ export default function HomePage() {
       </div>
 
       {/* Distribución de Estados */}
-      <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl p-6">
-        <div className="flex items-center gap-2 mb-6">
-          <BarChart3 className="w-5 h-5 text-purple-400" />
-          <h2 className="text-xl font-semibold text-white">Distribución de Estados</h2>
+      <div className="bg-surface border border-line p-6">
+        <div className="flex items-center gap-2 mb-5">
+          <span className="material-symbols-outlined text-boss-primary text-[20px] leading-none" aria-hidden="true">
+            bar_chart
+          </span>
+          <h2 className="font-display text-xl text-fg">Distribución de Estados</h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {stats?.status_distribution?.map((item) => {
             const total = stats.status_distribution.reduce((sum, s) => sum + s.count, 0);
             const percentage = total > 0 ? (item.count / total) * 100 : 0;
 
-            const statusColors: Record<string, string> = {
-              'CONFIRMED': 'from-green-500 to-emerald-500',
-              'PROBABLE': 'from-blue-500 to-cyan-500',
-              'NO_MATCH': 'from-orange-500 to-red-500',
-              'INTERNAL': 'from-purple-500 to-pink-500'
-            };
-
-            const statusLabels: Record<string, string> = {
-              'CONFIRMED': 'Confirmadas',
-              'PROBABLE': 'Probables',
-              'NO_MATCH': 'Sin Match',
-              'INTERNAL': 'Internas'
-            };
-
             return (
-              <div key={item.status} className="space-y-2">
+              <div key={item.status} className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-slate-300">{statusLabels[item.status] || item.status}</span>
-                  <span className="text-sm font-medium text-white">{item.count}</span>
+                  <span className="text-sm text-fg">{statusLabels[item.status] || item.status}</span>
+                  <span className="text-sm font-medium text-fg">{item.count}</span>
                 </div>
-                <div className="relative h-2 bg-slate-700 rounded-full overflow-hidden">
+                <div className="relative h-1.5 bg-canvas rounded-none overflow-hidden">
                   <div
-                    className={`absolute inset-y-0 left-0 bg-gradient-to-r ${statusColors[item.status] || 'from-gray-500 to-gray-600'} rounded-full`}
+                    className={`absolute inset-y-0 left-0 ${statusBarColors[item.status] || 'bg-fg-subtle'} transition-all duration-slow`}
                     style={{ width: `${percentage}%` }}
                   />
                 </div>
-                <div className="text-xs text-slate-500 text-right">{percentage.toFixed(1)}%</div>
+                <div className="text-xs text-fg-subtle text-right">{percentage.toFixed(1)}%</div>
               </div>
             );
           })}

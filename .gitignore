@@ -106,8 +106,14 @@ nul
 logs/
 *.log
 
-# === CLAUDE ===
+# === CLAUDE / AI TOOLING ===
 .claude/
+.superpowers/
+.atl/
+
+# Cloud SQL Auth Proxy binary (se descarga localmente, no se versiona)
+cloud-sql-proxy.exe
+cloud-sql-proxy
 
 # === SISTEMA OPERATIVO ===
 # Windows

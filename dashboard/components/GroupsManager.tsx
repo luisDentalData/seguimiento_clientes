@@ -2,12 +2,14 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Layers, Plus, Pencil, Trash2, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useGroups } from '@/lib/useGroups';
+import { Alert, Button } from '@/dd/components';
 
 interface ClientLite { id: string; name: string; }
 const fetcher = (url: string) => api.get(url).then(res => res.data);
+
+const inputCls = 'px-3 py-2 bg-canvas border border-fg-subtle text-fg text-sm rounded-sm placeholder-fg-subtle focus:outline-none focus:border-ink transition-colors duration-base';
 
 export default function GroupsManager() {
   const { groups, mutate } = useGroups();
@@ -59,45 +61,60 @@ export default function GroupsManager() {
     catch (err) { showErr(err, 'No se pudo quitar la sede'); }
   };
 
-  const inputClass = 'px-3 py-2 bg-slate-900/60 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors';
-
   return (
-    <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl overflow-hidden mt-6">
-      <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-b border-slate-700 px-6 py-4">
-        <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-          <Layers className="w-5 h-5" /> Grupos de sedes ({groups.length})
+    <div className="bg-surface border border-line overflow-hidden mt-6">
+      <div className="border-b border-line px-5 py-4">
+        <h2 className="text-base font-medium text-fg flex items-center gap-2">
+          <span className="material-symbols-outlined text-boss-primary text-[18px] leading-none" aria-hidden="true">layers</span>
+          Grupos de sedes ({groups.length})
         </h2>
-        <p className="text-sm text-slate-400 mt-1">Sedes de un mismo grupo comparten sus reuniones automáticamente.</p>
+        <p className="text-xs text-fg-muted mt-1">Sedes de un mismo grupo comparten sus reuniones automáticamente.</p>
       </div>
 
-      <div className="p-6 space-y-4">
+      <div className="p-5 space-y-4">
         {error && (
-          <div className="bg-red-500/10 border border-red-500/40 rounded-lg p-3 text-sm text-red-300">{error}</div>
+          <Alert variant="error">{error}</Alert>
         )}
 
         {/* Crear grupo */}
-        <div className="flex gap-3">
-          <input className={`${inputClass} flex-1`} placeholder="Nombre del grupo (ej. Maxal)" value={newName} onChange={e => setNewName(e.target.value)} />
-          <button onClick={createGroup} className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors whitespace-nowrap">
-            <Plus className="w-4 h-4" /> Crear grupo
-          </button>
+        <div className="flex gap-2">
+          <input
+            className={`${inputCls} flex-1`}
+            placeholder="Nombre del grupo (ej. Maxal)"
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && createGroup()}
+          />
+          <Button variant="primary" onClick={createGroup}>
+            <span className="material-symbols-outlined text-[14px] leading-none" aria-hidden="true">add</span>
+            Crear grupo
+          </Button>
         </div>
 
-        {/* Lista de grupos */}
         {groups.length === 0 ? (
-          <p className="text-slate-400 text-sm py-4 text-center">No hay grupos. Creá uno arriba.</p>
+          <p className="text-fg-muted text-sm py-4 text-center">No hay grupos. Creá uno arriba.</p>
         ) : (
           <div className="space-y-3">
             {groups.map(g => (
-              <div key={g.id} className="bg-slate-900/40 border border-slate-700 rounded-lg p-4">
+              <div key={g.id} className="bg-canvas border border-line p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-medium text-white">{g.name}</h3>
-                  <div className="flex gap-2">
-                    <button onClick={() => renameGroup(g.id, g.name)} className="p-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded transition-colors" title="Renombrar">
-                      <Pencil className="w-4 h-4" />
+                  <h3 className="text-sm font-medium text-fg">{g.name}</h3>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => renameGroup(g.id, g.name)}
+                      title="Renombrar"
+                      className="p-1.5 text-boss-primary hover:bg-boss-primary/10 transition-colors duration-fast"
+                    >
+                      <span className="material-symbols-outlined text-[15px] leading-none" aria-hidden="true">edit</span>
                     </button>
-                    <button onClick={() => deleteGroup(g.id, g.name)} className="p-1.5 bg-slate-700 hover:bg-red-500/30 text-slate-300 hover:text-red-300 rounded transition-colors" title="Borrar grupo">
-                      <Trash2 className="w-4 h-4" />
+                    <button
+                      type="button"
+                      onClick={() => deleteGroup(g.id, g.name)}
+                      title="Borrar grupo"
+                      className="p-1.5 text-fg-muted hover:text-danger-fg hover:bg-danger-tint transition-colors duration-fast"
+                    >
+                      <span className="material-symbols-outlined text-[15px] leading-none" aria-hidden="true">delete</span>
                     </button>
                   </div>
                 </div>
@@ -105,12 +122,17 @@ export default function GroupsManager() {
                 {/* Sedes (chips) */}
                 <div className="flex flex-wrap gap-2 mb-3">
                   {g.members.length === 0 ? (
-                    <span className="text-xs text-slate-500">Sin sedes asignadas</span>
+                    <span className="text-xs text-fg-subtle">Sin sedes asignadas</span>
                   ) : g.members.map(m => (
-                    <span key={m.id} className="inline-flex items-center gap-1 px-2 py-1 bg-slate-700/60 border border-slate-600 rounded text-sm text-slate-200">
+                    <span key={m.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-surface border border-line text-sm text-fg">
                       {m.name}
-                      <button onClick={() => removeMember(g.id, m.id)} className="text-slate-400 hover:text-red-300" title="Quitar sede">
-                        <X className="w-3 h-3" />
+                      <button
+                        type="button"
+                        onClick={() => removeMember(g.id, m.id)}
+                        title="Quitar sede"
+                        className="text-fg-muted hover:text-danger-fg transition-colors duration-fast"
+                      >
+                        <span className="material-symbols-outlined text-[13px] leading-none" aria-hidden="true">close</span>
                       </button>
                     </span>
                   ))}
@@ -119,16 +141,21 @@ export default function GroupsManager() {
                 {/* Agregar sede */}
                 <div className="flex gap-2">
                   <select
-                    className={`${inputClass} flex-1`}
+                    className={`${inputCls} flex-1`}
                     value={picker[g.id] ?? ''}
                     onChange={e => setPicker(p => ({ ...p, [g.id]: e.target.value }))}
                   >
                     <option value="">+ Agregar sede...</option>
                     {(clients ?? []).map(c => (
-                      <option key={c.id} value={c.id} className="bg-slate-800">{c.name} ({c.id})</option>
+                      <option key={c.id} value={c.id}>{c.name} ({c.id})</option>
                     ))}
                   </select>
-                  <button onClick={() => addMember(g.id)} disabled={!picker[g.id]} className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-slate-200 rounded-lg transition-colors">
+                  <button
+                    type="button"
+                    onClick={() => addMember(g.id)}
+                    disabled={!picker[g.id]}
+                    className="px-3 py-2 text-sm bg-surface border border-line text-fg hover:border-line-strong disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-base"
+                  >
                     Agregar
                   </button>
                 </div>
