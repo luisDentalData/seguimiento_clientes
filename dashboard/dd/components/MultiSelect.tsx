@@ -52,9 +52,9 @@ export function MultiSelect({
     return options.filter((o) => o.label.toLowerCase().includes(q));
   }, [options, query]);
 
-  useEffect(() => {
-    setActiveIndex((prev) => (filtered.length === 0 ? -1 : Math.min(prev, filtered.length - 1)));
-  }, [filtered.length]);
+  // Derived: clamp activeIndex to current filtered length without a side-effect setState
+  const safeActiveIndex =
+    filtered.length === 0 ? -1 : Math.min(activeIndex, filtered.length - 1);
 
   useEffect(() => {
     if (!open) return;
@@ -71,7 +71,7 @@ export function MultiSelect({
 
   function openList() {
     setOpen(true);
-    if (activeIndex === -1 && filtered.length > 0) setActiveIndex(0);
+    if (safeActiveIndex === -1 && filtered.length > 0) setActiveIndex(0);
   }
 
   function closeList() {
@@ -143,7 +143,7 @@ export function MultiSelect({
   }
 
   const activeDescendant =
-    open && activeIndex >= 0 ? optionId(activeIndex) : undefined;
+    open && safeActiveIndex >= 0 ? optionId(safeActiveIndex) : undefined;
 
   const selectedOptions = value
     .map((v) => options.find((o) => o.value === v))
@@ -241,7 +241,7 @@ export function MultiSelect({
             ) : (
               filtered.map((opt, index) => {
                 const isSelected = value.includes(opt.value);
-                const isActive = index === activeIndex;
+                const isActive = index === safeActiveIndex;
                 return (
                   <li
                     key={opt.value}

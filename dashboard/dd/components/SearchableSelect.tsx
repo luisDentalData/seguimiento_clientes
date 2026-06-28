@@ -47,11 +47,19 @@ export function SearchableSelect({
     return options.filter((o) => o.label.toLowerCase().includes(q));
   }, [options, query]);
 
-  useEffect(() => {
-    setActiveIndex((prev) =>
-      filtered.length === 0 ? -1 : Math.min(prev, filtered.length - 1),
-    );
-  }, [filtered.length]);
+  function openList() {
+    setOpen(true);
+  }
+
+  function closeList() {
+    setOpen(false);
+    setQuery("");
+    setActiveIndex(-1);
+  }
+
+  // Derived: clamp activeIndex to current filtered length without a side-effect setState
+  const safeActiveIndex =
+    filtered.length === 0 ? -1 : Math.min(activeIndex, filtered.length - 1);
 
   useEffect(() => {
     if (!open) return;
@@ -66,20 +74,6 @@ export function SearchableSelect({
     document.addEventListener("mousedown", handleMouseDown);
     return () => document.removeEventListener("mousedown", handleMouseDown);
   }, [open]);
-
-  useEffect(() => {
-    setQuery("");
-  }, [open]);
-
-  function openList() {
-    setOpen(true);
-  }
-
-  function closeList() {
-    setOpen(false);
-    setQuery("");
-    setActiveIndex(-1);
-  }
 
   function selectOption(optValue: string) {
     onChange(optValue);
@@ -106,8 +100,8 @@ export function SearchableSelect({
         break;
       case "Enter":
         e.preventDefault();
-        if (open && activeIndex >= 0 && filtered[activeIndex]) {
-          selectOption(filtered[activeIndex].value);
+        if (open && safeActiveIndex >= 0 && filtered[safeActiveIndex]) {
+          selectOption(filtered[safeActiveIndex].value);
         } else {
           openList();
         }
@@ -126,7 +120,7 @@ export function SearchableSelect({
   }
 
   const activeDescendant =
-    open && activeIndex >= 0 ? optionId(activeIndex) : undefined;
+    open && safeActiveIndex >= 0 ? optionId(safeActiveIndex) : undefined;
 
   const inputDisplayValue = open ? query : (selectedLabel ?? "");
 
@@ -210,7 +204,7 @@ export function SearchableSelect({
           ) : (
             filtered.map((opt, index) => {
               const isSelected = opt.value === value;
-              const isActive = index === activeIndex;
+              const isActive = index === safeActiveIndex;
               return (
                 <li
                   key={opt.value}
