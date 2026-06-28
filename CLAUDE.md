@@ -58,11 +58,12 @@ Ver `env.example` para referencia completa.
 - Region: `us-central1`
 - Memory: 512Mi (both services)
 - CPU: 1 vCPU
-- Timeout: Backend 300s, Frontend 60s
+- Timeout: Backend 600s, Frontend 60s
 - Min instances: 0 (scales to zero)
 - Max instances: Backend 10, Frontend 5
 
 **Quick Deploy Commands**:
+> Note: Deployments run automatically via GitHub Actions on push to `master`. Use these commands only for manual deploys.
 ```bash
 # Deploy backend
 gcloud run deploy dentaldata-backend \
@@ -71,11 +72,11 @@ gcloud run deploy dentaldata-backend \
   --platform managed \
   --allow-unauthenticated \
   --set-cloudsql-instances=seguimientoclientes-483013:europe-southwest1:dentaldata-db \
-  --set-secrets="DATABASE_URL=dentaldata-db-url:latest,/secrets/credentials.json=google-credentials:latest" \
+  --set-secrets="DATABASE_URL=dentaldata-db-url:latest,/secrets/credentials.json=google-credentials:latest,/token/token.pickle=google-oauth-token:latest" \
   --env-vars-file=.env.yaml \
   --memory=512Mi \
   --cpu=1 \
-  --timeout=300 \
+  --timeout=600 \
   --max-instances=10 \
   --min-instances=0 \
   --no-use-http2
@@ -384,11 +385,19 @@ DEFAULT_END_DATE = "2025-12-31"
   - Leaflet CSS imported in [dashboard/app/layout.tsx](dashboard/app/layout.tsx)
 
 ### ETL Process
-- Events are identified as analyst events if the organizer OR any attendee matches `ANALYST_EMAILS`
+
+**Architecture** ([src/etl.py](src/etl.py)):
+1. **Parallel fetch**: `ThreadPoolExecutor` creates one `GCalService` per analyst thread. Each thread uses its own httplib2 HTTP transport — sharing a single service across threads causes mixed responses and broken pagination (confirmed in production).
+2. **Deduplication**: Events from multiple analysts are deduplicated by event ID; organizer's copy is preferred.
+3. **In-memory matching**: `Matcher` loads all clients once; no per-event DB queries.
+4. **Bulk upsert**: `sqlalchemy.dialects.postgresql.insert` with `ON CONFLICT DO UPDATE` in batches of 500. Critical for cross-region Cloud SQL (europe-southwest1 → us-central1, ~100ms per round-trip). 14 round-trips instead of 6969.
+5. **Clinic sync**: runs after main ETL to replicate appointments across multi-location clinic groups.
+
+**API endpoint** ([src/main.py](src/main.py)): `/etl/run` is SYNCHRONOUS — runs blocking ETL in thread pool via `asyncio.get_running_loop().run_in_executor(None, run_etl)`. Must NOT use `BackgroundTasks` — Cloud Run kills background tasks after the HTTP response is sent.
+
 - Event IDs (from Google Calendar) serve as primary keys in `appointments` table to prevent duplicates
-- Updates re-run matching logic on existing appointments to catch client data changes
-- Queries a shared calendar and filters for analyst participation
 - Stores all meetings regardless of match status for complete audit trail
+- ETL takes ~89s in production (3 analysts, ~7000 events, 14 bulk batches)
 
 ### Adding New Clients Workflow
 
@@ -585,6 +594,34 @@ This project is developed on Windows:
 - [start_dev.bat](start_dev.bat) sets PATH and spawns CMD windows for backend/frontend
 - PostgreSQL runs on port 5432 with user `postgres` and password `dentaldata`
 
+### Connecting to Cloud SQL via DBeaver (or any external client)
+
+Cloud SQL does NOT expose a public TCP port. All external connections (local dev, DBeaver, teammates) require **cloud-sql-proxy** running locally.
+
+**Step 1: Start the proxy** (keep running in a terminal):
+```bash
+# Option A — using start_proxy.bat (recommended)
+start_proxy.bat
+
+# Option B — manual command (if cloud-sql-proxy.exe is not in project root)
+cloud-sql-proxy.exe seguimientoclientes-483013:europe-southwest1:dentaldata-db --port 5433
+```
+
+**Step 2: Configure DBeaver**:
+- Host: `127.0.0.1`
+- Port: `5433`
+- Database: `dentaldata`
+- User: `postgres`
+- Password: `dentaldata`
+
+**Teammates**: They need the same setup:
+1. Install [gcloud CLI](https://cloud.google.com/sdk/docs/install) and run `gcloud auth application-default login`
+2. Download `cloud-sql-proxy.exe` to their machine
+3. Run the proxy command above
+4. Connect DBeaver to `127.0.0.1:5433`
+
+The proxy always required — there is no way to connect directly to Cloud SQL without it.
+
 ### Managing Running Services
 
 To stop running services:
@@ -604,16 +641,20 @@ taskkill /IM python.exe /F
 
 ## Current Status & Working Features
 
+**Production**: ✅ Fully deployed and working on Google Cloud Run (June 2026).
+**CI/CD**: GitHub Actions deploys to Cloud Run automatically on push to `master`.
+
 ### ✅ Backend Features
-- Client database loaded from [clientes_maestro.json](clientes_maestro.json) (154 clients, 200+ emails)
+- Client database loaded from [clientes_maestro.json](clientes_maestro.json) (160 clients, 200+ emails)
 - FastAPI backend with all endpoints functional
 - **Improved matching algorithm** with word-boundary detection (prevents "antia" ↔ "garantia" confusion)
 - Personal event detection (filters casa, comida, llamar, etc.)
 - Internal meeting detection (filters out @dentaldata.es-only meetings)
 - **Fuzzy matching disabled** for higher precision
 - **Automatic clinic synchronization** for 6 multi-location clinic groups (17 clinics total)
-- Google Calendar integration with OAuth/Service Account support
-- PostgreSQL database with proper relationships
+- Google Calendar integration with OAuth token (preferred) and Service Account fallback
+- PostgreSQL (Cloud SQL) with proper relationships
+- **ETL endpoint** (`POST /etl/run`): synchronous, parallel fetch, bulk upsert — ~89s in production
 
 ### ✅ Frontend Features
 - **Overview Dashboard**: Real-time metrics, analyst performance, status distribution
@@ -632,6 +673,7 @@ taskkill /IM python.exe /F
   - Click provinces to view client details
   - Tooltips with meeting/client counts
 - **Auto-refresh**: All data refreshes every 30 seconds via SWR
+- **Sincronizar button** ([dashboard/components/SyncButton.tsx](dashboard/components/SyncButton.tsx)): triggers ETL, shows elapsed timer, 600s timeout
 - **Responsive Design**: Mobile-friendly with Tailwind CSS
 - **Dark Theme**: DD corporate design system (`data-theme="dark"` on `<html>`)
 
@@ -748,164 +790,55 @@ Real-time visualization with filters
 - Mobile app (React Native)
 - Real-time WebSocket updates instead of polling
 
-## 🚨 URGENT: Google Cloud Run Production Fixes
+## ✅ Google Cloud Run — Production Status (June 2026)
 
-**Status**: GCR deployment is currently **BROKEN** - ETL not running, data not updating in Cloud SQL, frontend showing stale/no data.
+**Status**: Production is **FULLY WORKING**. All critical issues resolved.
 
-### Critical Issues to Fix (In Priority Order)
+### Current Production State
 
-#### 1. ✅ UnicodeEncodeError in ETL (FIXED - Ready to Deploy)
-**Problem**: ETL crashes when processing Google Calendar events due to emoji characters in print statements
-- **File**: [src/services/gcal.py](src/services/gcal.py)
-- **Lines**: 62, 65-66, 70-71, 76-77, 81-82, 85-89
-- **Fix Applied**: Replaced all emoji characters (✅, ❌, 💡, 👤, 🔐) with ASCII text ([OK], [ERROR], [INFO], [IMPERSONATE], [AUTH])
-- **Impact**: ETL can now run without crashes in GCR
-- **Status**: ✅ Code fixed in local, ready to deploy
+| Service | URL | Status |
+|---------|-----|--------|
+| Backend | https://dentaldata-backend-243744598910.us-central1.run.app | ✅ Running |
+| Frontend | https://dentaldata-frontend-243744598910.us-central1.run.app | ✅ Running |
+| Cloud SQL | europe-southwest1:dentaldata-db | ✅ Connected |
 
-#### 2. ✅ API Parameter Missing (FIXED - Ready to Deploy)
-**Problem**: Frontend couldn't filter appointments by client
-- **File**: [src/main.py](src/main.py)
-- **Lines**: 84-85
-- **Fix Applied**: Added `matched_client_id` query parameter to `/appointments` endpoint
-- **Impact**: Frontend can now filter appointments correctly
-- **Status**: ✅ Code fixed in local, ready to deploy
+**Last verified metrics** (after Sincronizar): 160 clients — 131 OK / 17 Pendientes / 12 Críticos.
 
-#### 3. ⚠️ NEXT_PUBLIC_API_URL Configuration (NEEDS FIX)
-**Problem**: Frontend hardcoded to use `localhost:8000`, incompatible with GCR
-- **Files**:
-  - [dashboard/Dockerfile](dashboard/Dockerfile) (lines 48-63)
-  - [docker-compose.yml](docker-compose.yml) (line 250)
-- **Current State**:
-  - Local: Uses `http://localhost:8000` ✅ Works
-  - GCR: Tries to use `localhost:8000` ❌ Fails (should use `https://dentaldata-backend-243744598910.us-central1.run.app`)
-- **Solution Required**: Implement ARG-based build configuration
-  ```dockerfile
-  # dashboard/Dockerfile
-  ARG NEXT_PUBLIC_API_URL=http://localhost:8000
-  ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-  ```
+### How to Sync Data (ETL)
 
-  Deploy command for GCR:
-  ```bash
-  gcloud run deploy dentaldata-frontend \
-    --source . \
-    --region us-central1 \
-    --build-env-vars="NEXT_PUBLIC_API_URL=https://dentaldata-backend-243744598910.us-central1.run.app"
-  ```
-- **Status**: ⚠️ Pending implementation
+The **Sincronizar** button in the frontend header triggers the ETL. It runs synchronously and takes ~89s. A live elapsed timer is displayed while running.
 
-#### 4. ⚠️ ETL Execution in GCR (MANUAL WORKAROUND)
-**Problem**: No automatic ETL execution in GCR - data never updates
-- **Current Workaround**: Manual execution via Cloud Run Jobs or Cloud Shell
-  ```bash
-  # Connect to Cloud SQL and run ETL manually
-  gcloud run jobs execute etl-job --region us-central1
-  ```
-- **Ideal Solution**: Implement Cloud Scheduler to trigger `/etl/run` endpoint every 6-24 hours
-  ```bash
-  gcloud scheduler jobs create http etl-daily \
-    --schedule="0 2 * * *" \
-    --uri="https://dentaldata-backend-243744598910.us-central1.run.app/etl/run" \
-    --http-method=POST \
-    --location=us-central1
-  ```
-- **Status**: ⚠️ Not implemented (low priority - can use manual execution or Sync button for now)
-
-### Deployment Checklist for GCR
-
-**Pre-deployment Steps**:
-1. ✅ Verify all fixes applied in local environment
-2. ✅ Test ETL execution in Docker: `docker exec dentaldata-backend python src/etl.py`
-3. ✅ Verify frontend connects to backend: Check browser console for API calls
-4. ⚠️ Implement ARG-based NEXT_PUBLIC_API_URL configuration
-
-**Backend Deployment**:
+To trigger manually:
 ```bash
-# Deploy backend with latest fixes
-gcloud run deploy dentaldata-backend \
-  --source . \
-  --region us-central1 \
-  --platform managed \
-  --allow-unauthenticated \
-  --set-cloudsql-instances=seguimientoclientes-483013:europe-southwest1:dentaldata-db \
-  --set-secrets="DATABASE_URL=dentaldata-db-url:latest,/secrets/credentials.json=google-credentials:latest" \
-  --env-vars-file=.env.yaml \
-  --memory=512Mi \
-  --cpu=1 \
-  --timeout=300 \
-  --max-instances=10 \
-  --min-instances=0 \
-  --no-use-http2
+curl -X POST https://dentaldata-backend-243744598910.us-central1.run.app/etl/run
 ```
 
-**Frontend Deployment** (after fixing NEXT_PUBLIC_API_URL):
-```bash
-cd dashboard
-gcloud run deploy dentaldata-frontend \
-  --source . \
-  --region us-central1 \
-  --platform managed \
-  --allow-unauthenticated \
-  --build-env-vars="NEXT_PUBLIC_API_URL=https://dentaldata-backend-243744598910.us-central1.run.app" \
-  --memory=512Mi \
-  --cpu=1 \
-  --timeout=60 \
-  --max-instances=5 \
-  --min-instances=0 \
-  --no-use-http2
-```
-
-**Post-deployment Verification**:
-1. Check backend health: `curl https://dentaldata-backend-243744598910.us-central1.run.app/`
-2. Run ETL manually via Sync button or API call: `curl -X POST https://dentaldata-backend-243744598910.us-central1.run.app/etl/run`
-3. Verify Cloud SQL has data: Check `appointments` table count
-4. Verify frontend displays data: Open https://dentaldata-frontend-243744598910.us-central1.run.app/clientes
-5. Check browser console for API errors
-
-### Known GCR-Specific Issues
+### Known GCR-Specific Notes
 
 **Database Connection**:
 - Uses Cloud SQL Unix socket (not TCP): `postgresql+pg8000://postgres:dentaldata@/dentaldata?unix_sock=/cloudsql/seguimientoclientes-483013:europe-southwest1:dentaldata-db/.s.PGSQL.5432`
 - Requires `--set-cloudsql-instances` flag in deploy command
-- Database is in `europe-southwest1` region (not us-central1 where services run)
+- Database is in `europe-southwest1` region (not us-central1 where services run) — ~100ms cross-region latency per round-trip
 
-**Secrets Management**:
-- Google credentials stored in Secret Manager as `google-credentials`
-- Database URL stored as `dentaldata-db-url`
-- Secrets mounted to `/secrets/` directory (read-only)
-- Never mount secrets directly to `/app/` - it overwrites application code!
+**Secrets Management** (Secret Manager):
+| Secret | Path mounted | Purpose |
+|--------|-------------|---------|
+| `google-credentials` | `/secrets/credentials.json` | GCal Service Account |
+| `google-oauth-token` | `/token/token.pickle` | GCal OAuth token (preferred auth) |
+| `dentaldata-db-url` | `DATABASE_URL` env var | PostgreSQL connection string |
 
-**CORS Configuration**:
-- Backend must allow frontend origin
-- Update FRONTEND_URL env var after deploying frontend:
-  ```bash
-  gcloud run services update dentaldata-backend \
-    --region us-central1 \
-    --update-env-vars="FRONTEND_URL=https://dentaldata-frontend-243744598910.us-central1.run.app"
-  ```
+- Secrets in `/secrets/` and `/token/` are read-only. `token.pickle` refresh fails to write to disk but works in-memory — the occasional log warning is harmless.
+- **Never** mount secrets to `/app/` — it overwrites the application code.
+
+**CORS**: `FRONTEND_URL` env var controls allowed origins. Set via `.env.yaml`.
+
+**Deployment**: Automatic via GitHub Actions on push to `master`. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
 ### Future GCR Improvements (Post-MVP)
 
-Once core functionality is working in GCR:
-
-1. **Automatic ETL Scheduling** (Priority 1)
-   - Cloud Scheduler triggers `/etl/run` endpoint daily
-   - Pub/Sub for event-driven ETL execution
-
-2. **Performance Optimization** (Priority 2)
-   - Fix N+1 query in `/clients/with-meetings` endpoint (currently takes 48s)
-   - Implement query optimization with JOIN + GROUP BY
-   - Add Redis/Valkey caching layer
-
-3. **Monitoring & Alerting** (Priority 3)
-   - Cloud Logging for ETL execution logs
-   - Cloud Monitoring for performance metrics
-   - Error reporting for failed ETL runs
-
-4. **CI/CD Pipeline** (Priority 4)
-   - GitHub Actions for automated testing
-   - Automatic deployment on merge to main
-   - Rollback capability for failed deployments
+1. **Automatic ETL Scheduling** — Cloud Scheduler triggering `/etl/run` daily (currently manual via button)
+2. **Performance** — N+1 query in `/clients/with-meetings` (mitigated by 60s frontend timeout)
+3. **Monitoring** — Cloud Logging dashboards, error alerting for failed ETL runs
 
 ## Troubleshooting
 
