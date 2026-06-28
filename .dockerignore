@@ -188,6 +188,7 @@ id_mapping.json
 start_dev.bat
 *.bat
 *.sh
+!entrypoint.sh
 
 # Scripts de Windows (.bat) no funcionan en Linux
 # Los reemplazamos con docker-compose
