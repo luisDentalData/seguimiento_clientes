@@ -1,5 +1,7 @@
 
-from fastapi import FastAPI, Depends, HTTPException, Query, BackgroundTasks
+import asyncio
+
+from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, distinct, Integer
@@ -483,32 +485,27 @@ def get_client_detail(client_id: str, db: Session = Depends(get_db)):
     }
 
 @app.post("/etl/run")
-async def run_etl_endpoint(background_tasks: BackgroundTasks):
-    """
-    Ejecuta el proceso ETL manualmente para actualizar los datos del calendario.
-    Esta es una solución temporal para desarrollo. En producción se usará un scheduler.
-    """
-    def execute_etl():
-        """Ejecuta el ETL en el background"""
-        try:
-            print("===== INICIANDO ETL =====")
-            # Importar y ejecutar directamente la función ETL
-            from src.etl import run_etl
-            run_etl()
-            print("===== ETL COMPLETADO EXITOSAMENTE =====")
-        except Exception as e:
-            print(f"===== ERROR EN ETL: {str(e)} =====")
-            import traceback
-            traceback.print_exc()
+async def run_etl_endpoint():
+    """Ejecuta el proceso ETL y espera a que termine.
 
-    # Ejecutar ETL en background para no bloquear la respuesta
-    background_tasks.add_task(execute_etl)
-
-    return {
-        "status": "success",
-        "message": "ETL iniciado en segundo plano. Los datos se actualizarán en breve.",
-        "note": "Esta es una función temporal de desarrollo. En producción se usará un scheduler automático."
-    }
+    Sincrónico (no background task) para que Cloud Run no mate la tarea
+    antes de que el commit termine. Corre en un thread para no bloquear
+    el event loop de FastAPI durante los minutos que tarda.
+    """
+    from src.etl import run_etl
+    loop = asyncio.get_running_loop()
+    try:
+        stats = await loop.run_in_executor(None, run_etl)
+        return {
+            "status": "success",
+            "message": (
+                f"Sincronizacion completada: {stats['unique_events']} eventos, "
+                f"{stats['total_matched']} coincidencias con clientes"
+            ),
+            "stats": stats,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error en ETL: {str(e)}")
 
 @app.get("/etl/logs")
 def get_etl_logs(limit: int = 100):

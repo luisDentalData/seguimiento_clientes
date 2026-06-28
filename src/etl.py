@@ -1,7 +1,9 @@
 
 import sys
 import os
+import threading
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Path hack: Add project root (Seguimiento Clientes) to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,78 +16,76 @@ from src.services.clinic_sync import sync_clinic_groups, build_groups_from_db
 from src.services.analyst_admin import active_analyst_emails
 from src.models import Appointment
 from src.etl_logger import ETLLogger
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+BATCH_SIZE = 500
 
 
-def run_etl():
-    # Inicializar logger profesional
+def run_etl() -> dict:
     logger = ETLLogger(log_dir="logs")
     logger.start_execution()
 
     db = SessionLocal()
 
     try:
-        # Initialize Services
-        # Impersonate IMPERSONATE_EMAIL (luis@dentaldata.es) — same as the local
-        # token.pickle flow. Luis has all analyst calendars shared, so he can
-        # read them. The service account alone (no impersonation) gets 404.
+        # One GCalService for auth; get_events() calls are read-only and safe to
+        # share across threads (each execute() opens its own HTTP connection).
         gcal = GCalService(impersonate_email=IMPERSONATE_EMAIL)
         matcher = Matcher(db)
 
-        # Use config dates
         start_date = datetime.fromisoformat(DEFAULT_START_DATE.replace('Z', '+00:00'))
         end_date = datetime.fromisoformat(DEFAULT_END_DATE.replace('Z', '+00:00'))
 
-        total_processed = 0
-        total_matched = 0
-
-        # DIRECT CALENDAR STRATEGY
-        # Analistas activas desde la DB; fallback al env var si la tabla está vacía.
         analyst_emails = active_analyst_emails(db) or ANALYST_EMAILS
-        logger.info(f"Fetching events directly from {len(analyst_emails)} analyst calendars...")
+        logger.info(f"Fetching events from {len(analyst_emails)} analyst calendars in parallel...")
 
-        all_events = []
-        for analyst_email in analyst_emails:
-            logger.log_fetching_start(analyst_email)
+        all_events: list = []
+        lock = threading.Lock()
+
+        def fetch_analyst(email: str) -> list:
+            logger.log_fetching_start(email)
             try:
-                events = gcal.get_events(analyst_email, start_date, end_date)
-                logger.log_fetching_result(analyst_email, len(events))
+                events = gcal.get_events(email, start_date, end_date)
+                logger.log_fetching_result(email, len(events))
                 for event in events:
-                    event['_analyst_email'] = analyst_email
-                all_events.extend(events)
+                    event['_analyst_email'] = email
+                return events
             except Exception as e:
-                logger.log_error(f"Could not fetch events from {analyst_email}", e)
-                continue
+                logger.log_error(f"Could not fetch events from {email}", e)
+                return []
+
+        with ThreadPoolExecutor(max_workers=len(analyst_emails)) as executor:
+            futures = {executor.submit(fetch_analyst, email): email for email in analyst_emails}
+            for future in as_completed(futures):
+                events = future.result()
+                with lock:
+                    all_events.extend(events)
 
         logger.info(f"Total events from all analysts: {len(all_events)}")
 
-        # Deduplicate events by event_id (same event can appear in multiple calendars).
-        events_by_id = {}
+        # Deduplicate by event_id; prefer the organizer's copy.
+        events_by_id: dict = {}
         for event in all_events:
             event_id = event['id']
-            event_analyst = event.get('_analyst_email')
+            event_analyst = event.get('_analyst_email', '')
             organizer = event.get('organizer', {}).get('email', '').lower()
-
-            if event_id not in events_by_id:
+            if event_id not in events_by_id or organizer == event_analyst.lower():
                 events_by_id[event_id] = event
-            else:
-                if organizer == event_analyst.lower():
-                    events_by_id[event_id] = event
 
         unique_events = list(events_by_id.values())
         logger.info(f"Unique events (after deduplication): {len(unique_events)}")
 
-        # Precargar appointments existentes en memoria (mata el N+1 por evento).
-        existing_by_id = {a.id: a for a in db.query(Appointment).all()}
+        # In-memory matching (Matcher caches all clients — no per-event DB query).
+        logger.info("Matching events to clients...")
+        rows_to_upsert: list = []
+        total_matched = 0
+        now = datetime.utcnow()
 
-        # Process all unique events
         for event in unique_events:
             event_analyst = event.get('_analyst_email')
             event_id = event['id']
             summary = event.get('summary', 'No Title')
 
-            existing = existing_by_id.get(event_id)
-
-            # Parse times
             start = event.get('start', {}).get('dateTime') or event.get('start', {}).get('date')
             end = event.get('end', {}).get('dateTime') or event.get('end', {}).get('date')
 
@@ -97,77 +97,65 @@ def run_etl():
 
             attendees = [a.get('email') for a in event.get('attendees', []) if a.get('email')]
 
-            # Run Matching Logic
             match_result = matcher.match_appointment({
                 "summary": summary,
                 "attendees": attendees,
             })
 
-            # Nombre del cliente desde cache (sin query — N+1 eliminado).
-            client_name = matcher.client_name(match_result['matched_client_id'])
-
-            logger.log_processing_event(event_id, summary)
-            logger.log_match_result(
-                event_id,
-                match_result['match_status'],
-                client_name,
-                match_result['match_confidence'],
-            )
-
-            is_new = existing is None
             is_client_meeting = match_result['match_status'] in ['CONFIRMED', 'PROBABLE']
-
-            if is_new:
-                new_appt = Appointment(
-                    id=event_id,
-                    analyst_email=event_analyst,
-                    summary=summary,
-                    description=event.get('description'),
-                    start_time=start_dt,
-                    end_time=end_dt,
-                    attendees=attendees,
-                    is_client_meeting=is_client_meeting,
-                    match_status=match_result['match_status'],
-                    match_confidence=match_result['match_confidence'],
-                    match_reason=match_result['match_reason'],
-                    matched_client_id=match_result['matched_client_id'],
-                    category=match_result['category'],
-                )
-                db.add(new_appt)
-                existing_by_id[event_id] = new_appt
-            else:
-                changed = (
-                    existing.summary != summary or
-                    existing.start_time != start_dt or
-                    existing.end_time != end_dt or
-                    existing.match_status != match_result['match_status'] or
-                    existing.matched_client_id != match_result['matched_client_id'] or
-                    existing.category != match_result['category']
-                )
-                if changed:
-                    existing.summary = summary
-                    existing.start_time = start_dt
-                    existing.end_time = end_dt
-                    existing.match_status = match_result['match_status']
-                    existing.matched_client_id = match_result['matched_client_id']
-                    existing.match_confidence = match_result['match_confidence']
-                    existing.match_reason = match_result['match_reason']
-                    existing.is_client_meeting = is_client_meeting
-                    existing.category = match_result['category']
-                else:
-                    logger.metrics["unchanged_appointments"] += 1
-
-            logger.log_db_operation("INSERT" if is_new else "UPDATE", event_id, is_new)
-
-            total_processed += 1
             if is_client_meeting:
                 total_matched += 1
 
-        db.commit()
-        logger.info("Database commit successful")
+            rows_to_upsert.append({
+                'id': event_id,
+                'analyst_email': event_analyst,
+                'summary': summary,
+                'description': event.get('description'),
+                'start_time': start_dt,
+                'end_time': end_dt,
+                'attendees': attendees,
+                'is_client_meeting': is_client_meeting,
+                'match_status': match_result['match_status'],
+                'match_confidence': match_result['match_confidence'],
+                'match_reason': match_result['match_reason'],
+                'matched_client_id': match_result['matched_client_id'],
+                'category': match_result.get('category'),
+                'created_at': now,
+                'updated_at': now,
+            })
 
-        # Sincronización de clínicas que comparten reuniones (config-driven).
-        # Antes: ~600 líneas copy-paste. Ahora: una tabla de config + un loop.
+        logger.info(f"Matching done: {len(rows_to_upsert)} events, {total_matched} matched to clients")
+
+        # Bulk upsert via PostgreSQL INSERT ... ON CONFLICT DO UPDATE.
+        # One round-trip per BATCH_SIZE rows instead of one per row — critical for
+        # cross-region Cloud SQL (europe-southwest1 from us-central1).
+        total_batches = max(1, (len(rows_to_upsert) + BATCH_SIZE - 1) // BATCH_SIZE)
+        for i in range(0, len(rows_to_upsert), BATCH_SIZE):
+            batch = rows_to_upsert[i:i + BATCH_SIZE]
+            batch_num = i // BATCH_SIZE + 1
+
+            stmt = pg_insert(Appointment.__table__).values(batch)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=['id'],
+                set_={
+                    'summary': stmt.excluded.summary,
+                    'start_time': stmt.excluded.start_time,
+                    'end_time': stmt.excluded.end_time,
+                    'attendees': stmt.excluded.attendees,
+                    'match_status': stmt.excluded.match_status,
+                    'match_confidence': stmt.excluded.match_confidence,
+                    'match_reason': stmt.excluded.match_reason,
+                    'matched_client_id': stmt.excluded.matched_client_id,
+                    'is_client_meeting': stmt.excluded.is_client_meeting,
+                    'category': stmt.excluded.category,
+                    'updated_at': stmt.excluded.updated_at,
+                }
+            )
+            db.execute(stmt)
+            db.commit()
+            logger.info(f"Batch {batch_num}/{total_batches}: {len(batch)} appointments upserted")
+
+        # Clinic group synchronization (config-driven, no copy-paste).
         logger.info("=" * 60)
         logger.info("Sincronizando clínicas que comparten reuniones...")
         sync_stats = sync_clinic_groups(db, build_groups_from_db(db))
@@ -177,17 +165,24 @@ def run_etl():
                 logger.info(f"  [{label}] {count} nuevos appointments")
         logger.info(f"Sync total: {sum(sync_stats.values())} nuevos appointments")
 
-        # Métricas finales
         logger.update_metrics(
-            total_processed=total_processed,
+            total_processed=len(rows_to_upsert),
             total_matched=total_matched,
         )
         logger.end_execution()
+
+        return {
+            "total_fetched": len(all_events),
+            "unique_events": len(unique_events),
+            "total_matched": total_matched,
+            "batches_committed": total_batches,
+        }
 
     except Exception as e:
         logger.log_error("ETL Failed", e)
         import traceback
         traceback.print_exc()
+        raise
     finally:
         db.close()
 
