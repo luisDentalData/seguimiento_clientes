@@ -13,21 +13,36 @@ The system automatically identifies which calendar events are actual client meet
 ## Deployment Environments
 
 ### Local Development
-```bash
-# Windows: Start both backend and frontend together
-start_dev.bat
 
-# Manual start - Backend (from project root)
+#### Conectar a la base de datos de producción (recomendado)
+
+El equipo comparte la misma Cloud SQL de producción también en desarrollo. Para conectarte:
+
+**Requisitos previos (una sola vez por máquina)**:
+1. Instalar [gcloud CLI](https://cloud.google.com/sdk/docs/install)
+2. Autenticarse: `gcloud auth application-default login`
+3. Descargar `cloud-sql-proxy.exe` desde la [página de releases](https://github.com/GoogleCloudPlatform/cloud-sql-proxy/releases/latest) (buscar `cloud-sql-proxy.x64.exe`) y copiarlo como `cloud-sql-proxy.exe` en la raíz del proyecto
+
+**Cada vez que vayas a desarrollar**:
+```bash
+# Terminal 1: Proxy (mantener corriendo)
+start_proxy.bat
+
+# Terminal 2: Backend
 python -m uvicorn src.main:app --host 127.0.0.1 --port 8000 --reload
 
-# Manual start - Frontend (from dashboard/)
-cd dashboard
-start.bat
-# OR if start.bat doesn't exist:
-npm run dev
+# Terminal 3: Frontend
+cd dashboard && npm run dev
 ```
 
+**`.env` para conectar via proxy** (puerto 5433):
+```
+DATABASE_URL=postgresql+pg8000://postgres:dentaldata@127.0.0.1:5433/dentaldata
+```
+Ver `env.example` para referencia completa.
+
 **Local Port Configuration**:
+- Cloud SQL Proxy: puerto **5433** (túnel local → Cloud SQL)
 - Backend runs on port **8000**
 - Frontend runs on port **3000**
 - API client ([dashboard/lib/api.ts](dashboard/lib/api.ts)) configured to `http://127.0.0.1:8000`
@@ -100,11 +115,19 @@ python src/scripts/check_db.py
 python src/scripts/export_db_to_json.py
 ```
 
-**⚠️ CRITICAL WARNING about `load_clientes_maestro.py`**:
-- This script **DROPS ALL TABLES** (`Base.metadata.drop_all()` on line 33) including `appointments` with 3,360+ records
-- **DO NOT USE in production** to add new clients - you will lose all appointment history
-- **Current workaround**: Only use in development or after backing up the database
-- **Pending fix**: See "Priority 0 - Implement incremental sync" for the proper solution
+**✅ El ETL y la carga de clientes son INCREMENTALES (no destructivos)**:
+- `src/scripts/sync_clientes_maestro.py` — **usar esto para el día a día**. Upsert por ID, nunca toca `appointments`.
+- `src/etl.py` — ya es incremental: INSERT si el evento es nuevo, UPDATE solo si cambió algo, sin tocar lo que no cambió.
+- `src/scripts/load_clientes_maestro.py` — **solo disaster recovery**. Requiere `ALLOW_DESTRUCTIVE_LOAD=yes` o falla con error explícito. Dropea todas las tablas.
+
+**Flujo correcto para añadir/actualizar clientes**:
+```bash
+# 1. Editar clientes_maestro.json
+# 2. Sync no destructivo (no toca appointments)
+python src/scripts/sync_clientes_maestro.py
+# 3. Ejecutar ETL para re-matchear con los nuevos clientes
+python src/etl.py
+```
 
 ### Frontend Commands
 ```bash
@@ -610,18 +633,35 @@ taskkill /IM python.exe /F
   - Tooltips with meeting/client counts
 - **Auto-refresh**: All data refreshes every 30 seconds via SWR
 - **Responsive Design**: Mobile-friendly with Tailwind CSS
-- **Dark Theme**: Professional slate-950 background with vibrant accents
+- **Dark Theme**: DD corporate design system (`data-theme="dark"` on `<html>`)
 
-### 🎨 Design System
-- **Colors**:
-  - Background: slate-950, slate-900
-  - Cards: slate-800/50 with backdrop-blur
-  - Borders: slate-700
-  - Accents: blue, green, yellow, red (status-based)
-  - Map: pink→violet→blue→cyan→emerald gradient
-- **Typography**: Geist Sans font family
-- **Icons**: Lucide React (outlined style)
-- **Spacing**: Consistent 6-unit grid (24px)
+### 🎨 Design System (DD Corporate — January 2026)
+
+The frontend was fully migrated to the **DD design system** (`dd_design/`). Do NOT use the old slate/Tailwind v3 dark theme.
+
+- **Theme activation**: `data-theme="dark"` on `<html>` — NOT `className="dark"`
+- **Token source**: `dashboard/dd/theme.css` (copy of `dd_design/theme.css`)
+- **Component library**: `dashboard/dd/components/` — 21 components (Button, Badge, Card, Alert, Modal, Table, etc.)
+- **Colors** (use CSS tokens, never hardcode slate):
+  - `bg-canvas` (#0D0D0C) — page background
+  - `bg-surface` (#181816) — cards and panels
+  - `border-line` — default borders
+  - `text-fg` / `text-fg-muted` / `text-fg-subtle` — text hierarchy
+  - `text-boss-primary` / `bg-boss-primary` — brand purple (#4507cc)
+  - `text-accent` / `bg-accent` — orange (#E85420)
+  - `text-success` / `bg-success` — green
+  - `text-danger-fg` / `bg-danger-tint` — red
+- **Typography**:
+  - `font-display` → Syne (headings, metrics)
+  - `font-body` → DM Sans (default body)
+  - `font-mono` → JetBrains Mono (code)
+  - Loaded via Google Fonts in `dashboard/app/layout.tsx`
+- **Icons**: Material Symbols Outlined — `<span className="material-symbols-outlined">icon_name</span>`
+  - lucide-react is **removed** from the project
+  - Icons are loaded via Google Fonts link in layout.tsx
+- **Charts**: Recharts with **hardcoded hex colors** — Recharts does NOT read CSS variables
+- **Corner radius**: square/minimal — no `rounded-xl`, use `rounded-sm` at most
+- **Spacing**: consistent `p-5` / `p-4` cards, `gap-4` / `gap-5` grids
 
 ### 📊 Key Metrics Tracked
 1. **Total Clients**: All clients in database

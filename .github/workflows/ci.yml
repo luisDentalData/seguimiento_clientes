@@ -1,4 +1,4 @@
-name: CI
+name: CI / CD
 
 on:
   push:
@@ -7,6 +7,9 @@ on:
     branches: ["**"]
 
 jobs:
+  # ─────────────────────────────────────────────
+  #  CI — corre en todos los pushes y PRs
+  # ─────────────────────────────────────────────
   backend:
     name: Backend (pytest + Postgres real)
     runs-on: ubuntu-latest
@@ -27,7 +30,6 @@ jobs:
           --health-retries 5
 
     env:
-      # conftest crea la base dentaldata_test sobre este servicio Postgres real.
       TEST_DATABASE_URL: postgresql+pg8000://postgres:dentaldata@localhost:5432/dentaldata_test
 
     steps:
@@ -73,3 +75,59 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+  # ─────────────────────────────────────────────
+  #  CD — solo en merge/push a main
+  # ─────────────────────────────────────────────
+  deploy:
+    name: Deploy to Cloud Run
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      # El backend incluye alembic upgrade head en entrypoint.sh —
+      # las migraciones se aplican automáticamente al arrancar el container.
+      - name: Deploy backend
+        run: |
+          gcloud run deploy dentaldata-backend \
+            --source . \
+            --region us-central1 \
+            --platform managed \
+            --allow-unauthenticated \
+            --set-cloudsql-instances=seguimientoclientes-483013:europe-southwest1:dentaldata-db \
+            --set-secrets="DATABASE_URL=dentaldata-db-url:latest,/secrets/credentials.json=google-credentials:latest" \
+            --env-vars-file=.env.yaml \
+            --memory=512Mi \
+            --cpu=1 \
+            --timeout=300 \
+            --max-instances=10 \
+            --min-instances=0 \
+            --no-use-http2 \
+            --quiet
+
+      - name: Deploy frontend
+        working-directory: dashboard
+        run: |
+          gcloud run deploy dentaldata-frontend \
+            --source . \
+            --region us-central1 \
+            --platform managed \
+            --allow-unauthenticated \
+            --memory=512Mi \
+            --cpu=1 \
+            --timeout=60 \
+            --max-instances=5 \
+            --min-instances=0 \
+            --no-use-http2 \
+            --quiet
